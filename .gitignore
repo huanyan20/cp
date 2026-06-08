@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+
+# Virtual environments
+env/
+.venv/
+venv/
+
+# Local secrets and browser state
+.env
+.env.*
+!.env.example
+playwright_state.json
+
+# Runtime state from live/dry-run trading
+signal.json
+executed_signals.json
+pending_buys_*.json
+logs/
+
+# Generated research artifacts
+results_dir/
+models_dir/
+*.zip
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.html
+*.pdf
+
+# Data/cache outputs
+.cache/
+capital_flow_analysis/data/cache/
+capital_flow_analysis/data/*.csv
+capital_flow_analysis/data/*.json
+capital_flow_analysis/reports/*.png
+capital_flow_analysis/reports/*.json
+capital_flow_analysis/reports/*.md
+
+# IDE / OS
+.vscode/
+.vs/
+desktop.ini
+.DS_Store

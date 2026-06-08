@@ -1,0 +1,371 @@
+{
+    "ranking": [
+        "sortino desc",
+        "max_drawdown asc",
+        "total_return desc"
+    ],
+    "conclusions": [
+        "Best ranked model: SAC / cash=enabled / variant=base (Sortino 2.32, MDD 36.09%).",
+        "Dynamic cash behavior: at least one cash-enabled model shows active cash adjustment.",
+        "Main risk period: 2024H2 with average return -1.84%.",
+        "Regime sensitivity warning: negative average OOS periods detected in 2024H2.",
+        "Concentration warning: one period dominates absolute performance contribution (2026H1).",
+        "Evidence level: baseline matrix is populated; compare seed dispersion before live use.",
+        "Do not promote to live trading unless Sortino, drawdown, cash behavior, and turnover all remain acceptable across seeds."
+    ],
+    "summary": [
+        {
+            "algo": "sac",
+            "cash_mode": "enabled",
+            "variant": "base",
+            "seeds": [
+                42,
+                43,
+                44
+            ],
+            "sortino_mean": 2.3220142264344505,
+            "sortino_std": 0.1653512300575607,
+            "max_drawdown_mean": 0.36089600005376643,
+            "max_drawdown_std": 0.026178008369364014,
+            "total_return_mean": 1.636952909617026,
+            "total_return_std": 0.20136446980865896,
+            "avg_cash_weight_mean": 0.06714567973706222,
+            "avg_cash_weight_std": 0.004012751902097589,
+            "cash_weight_std_mean": 0.03788404553881185,
+            "cash_weight_std_std": 0.016013516024854846,
+            "cash_corr_next_return_mean": -0.04443674152732178,
+            "cash_corr_next_return_std": 0.03931278692011937,
+            "turnover_mean": 0.008430282933556514,
+            "turnover_std": 2.904769562424428e-05,
+            "win_rate_mean": 0.5536231884057972,
+            "win_rate_std": 0.00738988335303303,
+            "cash_behavior": "active cash"
+        },
+        {
+            "algo": "ppo",
+            "cash_mode": "disabled",
+            "variant": "base",
+            "seeds": [
+                42,
+                43,
+                44
+            ],
+            "sortino_mean": 2.285753404634764,
+            "sortino_std": 0.6316584211919906,
+            "max_drawdown_mean": 0.34938008770722256,
+            "max_drawdown_std": 0.039716168678670526,
+            "total_return_mean": 2.099414118884947,
+            "total_return_std": 1.1345024366441858,
+            "avg_cash_weight_mean": 3.091148708177649e-05,
+            "avg_cash_weight_std": 1.7958317990208496e-06,
+            "cash_weight_std_mean": 4.8500087240895585e-05,
+            "cash_weight_std_std": 1.5553283291803614e-06,
+            "cash_corr_next_return_mean": -0.002663672105959224,
+            "cash_corr_next_return_std": 0.04275970793430771,
+            "turnover_mean": 0.009313402778428534,
+            "turnover_std": 5.376564485218165e-05,
+            "win_rate_mean": 0.5565217391304348,
+            "win_rate_std": 0.032097441435289996,
+            "cash_behavior": "cash disabled"
+        },
+        {
+            "algo": "ppo",
+            "cash_mode": "enabled",
+            "variant": "base",
+            "seeds": [
+                42,
+                43,
+                44
+            ],
+            "sortino_mean": 2.2034002147078104,
+            "sortino_std": 0.449064838730813,
+            "max_drawdown_mean": 0.3612234517075585,
+            "max_drawdown_std": 0.02608566996024211,
+            "total_return_mean": 1.5926299353045084,
+            "total_return_std": 0.630109927359823,
+            "avg_cash_weight_mean": 0.09625622327346406,
+            "avg_cash_weight_std": 0.017532256200965907,
+            "cash_weight_std_mean": 0.024675657629580305,
+            "cash_weight_std_std": 0.009200227036867799,
+            "cash_corr_next_return_mean": 0.010348441980038703,
+            "cash_corr_next_return_std": 0.049279833259861,
+            "turnover_mean": 0.03146721671024958,
+            "turnover_std": 0.03274202890403321,
+            "win_rate_mean": 0.5579710144927537,
+            "win_rate_std": 0.01864446424676608,
+            "cash_behavior": "active cash"
+        },
+        {
+            "algo": "sac",
+            "cash_mode": "disabled",
+            "variant": "base",
+            "seeds": [
+                42,
+                43,
+                44
+            ],
+            "sortino_mean": 1.9384742654901668,
+            "sortino_std": 0.23372299146584974,
+            "max_drawdown_mean": 0.4010923639060449,
+            "max_drawdown_std": 0.03927490937100239,
+            "total_return_mean": 1.2771568651345586,
+            "total_return_std": 0.20539405862536658,
+            "avg_cash_weight_mean": 3.143428028493688e-05,
+            "avg_cash_weight_std": 5.490243786637374e-07,
+            "cash_weight_std_mean": 4.8233831152282663e-05,
+            "cash_weight_std_std": 9.416496448155745e-07,
+            "cash_corr_next_return_mean": -0.0037083910609167063,
+            "cash_corr_next_return_std": 0.05714495019346709,
+            "turnover_mean": 0.013130604994037877,
+            "turnover_std": 0.005831589602951327,
+            "win_rate_mean": 0.5478260869565217,
+            "win_rate_std": 0.012799653429460624,
+            "cash_behavior": "cash disabled"
+        },
+        {
+            "algo": "ppo",
+            "cash_mode": "enabled",
+            "variant": "with_features",
+            "seeds": [
+                42,
+                43,
+                44
+            ],
+            "sortino_mean": 0.8759796515594326,
+            "sortino_std": 1.0960504587260775,
+            "max_drawdown_mean": 0.254605213549955,
+            "max_drawdown_std": 0.12563800021070146,
+            "total_return_mean": 1.0797624971170225,
+            "total_return_std": 1.552823040396424,
+            "avg_cash_weight_mean": 0.4934391013709906,
+            "avg_cash_weight_std": 0.1891651425594921,
+            "cash_weight_std_mean": 0.4619666385402222,
+            "cash_weight_std_std": 0.02664222335095221,
+            "cash_corr_next_return_mean": -0.039853137753479796,
+            "cash_corr_next_return_std": 0.0392015013725934,
+            "turnover_mean": 0.004470277588731825,
+            "turnover_std": 0.0017733374684002297,
+            "win_rate_mean": 0.2536231884057971,
+            "win_rate_std": 0.09889645239631376,
+            "cash_behavior": "active cash"
+        }
+    ],
+    "baselines": {
+        "period": {
+            "start": "2024-07-01",
+            "end": "2026-06-08"
+        },
+        "generated_at": "2026-06-08T21:35:34.649115",
+        "^TWII": {
+            "total_return": 0.954629,
+            "sharpe": 1.5567,
+            "sortino": 1.9884,
+            "max_drawdown": 0.286932,
+            "description": "Taiwan Weighted Index"
+        },
+        "0050": {
+            "total_return": 1.323373,
+            "sharpe": 1.8159,
+            "sortino": 2.4173,
+            "max_drawdown": 0.27485,
+            "description": "Taiwan 50 ETF (元大台灣50)"
+        },
+        "buy_and_hold": {
+            "total_return": 1.323373,
+            "sharpe": 1.8159,
+            "sortino": 2.4173,
+            "max_drawdown": 0.27485,
+            "description": "buy-and-hold proxy via 0050.TW (equal-weight tech30 approximation)"
+        }
+    },
+    "ablations": {
+        "overnight_features": {
+            "matched_seeds": [
+                42,
+                43,
+                44
+            ],
+            "verdict": "feature improves drawdown only",
+            "with_feature": {
+                "sortino": 0.87598,
+                "total_return": 1.079762,
+                "max_drawdown": 0.254605,
+                "sharpe": 0.720134,
+                "turnover": 0.00447,
+                "win_rate": 0.253623
+            },
+            "without_feature": {
+                "sortino": 2.2034,
+                "total_return": 1.59263,
+                "max_drawdown": 0.361223,
+                "sharpe": 1.612724,
+                "turnover": 0.031467,
+                "win_rate": 0.557971
+            },
+            "delta": {
+                "sortino": -1.32742,
+                "total_return": -0.512868,
+                "max_drawdown": -0.106618,
+                "sharpe": -0.89259,
+                "turnover": -0.026997,
+                "win_rate": -0.304348
+            }
+        }
+    },
+    "stress_tests": {
+        "source": "ppo / disabled / seed43",
+        "baseline_return": 3.528315910991795,
+        "avg_daily_turnover": 0.009327542328316233,
+        "trading_days": 504,
+        "generated_at": "2026-06-08T21:35:33.666157",
+        "tests": {
+            "base": {
+                "total_return": 3.403781,
+                "cost_drag": 0.027501,
+                "daily_cost_bps": 0.5457,
+                "description": "standard broker (0.1425% one-way + 0.300% sell tax)",
+                "fee_rate": 0.001425,
+                "tax_rate": 0.003
+            },
+            "high_fee": {
+                "total_return": 3.336724,
+                "cost_drag": 0.04231,
+                "daily_cost_bps": 0.8395,
+                "description": "high fee (0.3000% one-way + 0.300% sell tax)",
+                "fee_rate": 0.003,
+                "tax_rate": 0.003
+            },
+            "high_slippage": {
+                "total_return": 3.251572,
+                "cost_drag": 0.061114,
+                "daily_cost_bps": 1.2126,
+                "description": "high slippage (0.5000% one-way + 0.300% sell tax)",
+                "fee_rate": 0.005,
+                "tax_rate": 0.003
+            },
+            "worst_case": {
+                "total_return": 3.230284,
+                "cost_drag": 0.065815,
+                "daily_cost_bps": 1.3059,
+                "description": "worst case (0.5000% one-way + 0.400% sell tax)",
+                "fee_rate": 0.005,
+                "tax_rate": 0.004
+            }
+        }
+    },
+    "source_files": [
+        "results_dir\\metrics_ppo_disabled_wf_seed42.json",
+        "results_dir\\metrics_ppo_disabled_wf_seed43.json",
+        "results_dir\\metrics_ppo_disabled_wf_seed44.json",
+        "results_dir\\metrics_ppo_enabled_wf_seed42.json",
+        "results_dir\\metrics_ppo_enabled_wf_seed43.json",
+        "results_dir\\metrics_ppo_enabled_wf_seed44.json",
+        "results_dir\\metrics_ppo_enabled_with_features_wf_seed42.json",
+        "results_dir\\metrics_ppo_enabled_with_features_wf_seed43.json",
+        "results_dir\\metrics_ppo_enabled_with_features_wf_seed44.json",
+        "results_dir\\metrics_sac_disabled_wf_seed42.json",
+        "results_dir\\metrics_sac_disabled_wf_seed43.json",
+        "results_dir\\metrics_sac_disabled_wf_seed44.json",
+        "results_dir\\metrics_sac_enabled_wf_seed42.json",
+        "results_dir\\metrics_sac_enabled_wf_seed43.json",
+        "results_dir\\metrics_sac_enabled_wf_seed44.json"
+    ],
+    "promotion_gate": {
+        "can_promote": false,
+        "risk_level": "medium",
+        "summary": "✗ Model blocked by 2 gate(s): Drawdown Gate, Ablation (Features). Address failures before promotion. (6/8 total gates passed)",
+        "gates": [
+            {
+                "name": "Sortino Stability",
+                "passed": true,
+                "message": "3 seeds, Sortino 2.32 +/- 0.17. Need 3 seeds and >= 0.8 Sortino.",
+                "details": {
+                    "seeds": 3,
+                    "sortino_mean": 2.3220142264344505,
+                    "sortino_std": 0.1653512300575607,
+                    "min_seeds": 3,
+                    "threshold": 0.8
+                }
+            },
+            {
+                "name": "Drawdown Gate",
+                "passed": false,
+                "message": "Max drawdown 36.09% +/- 2.62% (worst case 38.71%). Limit: 35.0%.",
+                "details": {
+                    "mdd_mean": 0.36089600005376643,
+                    "mdd_std": 0.026178008369364014,
+                    "worst_case": 0.38707400842313044,
+                    "limit": 0.35
+                }
+            },
+            {
+                "name": "Cash Behavior",
+                "passed": true,
+                "message": "Cash: active cash. Acceptable.",
+                "details": {
+                    "cash_mode": "enabled",
+                    "behavior": "active cash",
+                    "require_active": false
+                }
+            },
+            {
+                "name": "Turnover Gate",
+                "passed": true,
+                "message": "Turnover 0.84% +/- 0.00% (worst case 0.85%). Limit: 10.0%.",
+                "details": {
+                    "turnover_mean": 0.008430282933556514,
+                    "turnover_std": 2.904769562424428e-05,
+                    "worst_case": 0.008459330629180759,
+                    "limit": 0.1
+                }
+            },
+            {
+                "name": "Period Consistency",
+                "passed": true,
+                "message": "Period returns median 17.9% +/- 52.3%. Worst period: -3.6%. Consistent performance.",
+                "details": {
+                    "median_return": 0.1793359923912126,
+                    "std_return": 0.523100170267691,
+                    "worst_period": -0.03582061085155378,
+                    "num_periods": 4
+                }
+            },
+            {
+                "name": "Baseline Comparison",
+                "passed": true,
+                "message": "Model beats 3/3 baselines. Beaten: buy_and_hold, ^TWII, 0050.",
+                "details": {
+                    "model_return": 1.636952909617026,
+                    "model_sharpe": 0.0,
+                    "baselines_beaten": [
+                        "buy_and_hold",
+                        "^TWII",
+                        "0050"
+                    ],
+                    "total_baselines": 3
+                }
+            },
+            {
+                "name": "Ablation (Features)",
+                "passed": false,
+                "message": "With overnight_features: Sortino 0.88. Without: 2.20. Improvement: -1.33.",
+                "details": {
+                    "feature": "overnight_features",
+                    "with_sortino": 0.87598,
+                    "without_sortino": 2.2034,
+                    "improvement": -1.3274199999999998
+                }
+            },
+            {
+                "name": "Stress Testing",
+                "passed": true,
+                "message": "Passes 4/4 stress tests. Worst impact: 0.0% return reduction.",
+                "details": {
+                    "tests_survived": 4,
+                    "total_tests": 4,
+                    "worst_impact": 0.0
+                }
+            }
+        ]
+    }
+}
