@@ -11,8 +11,8 @@
 
 | Tier | timesteps | seeds | 通過條件 | 用途 |
 |------|-----------|-------|----------|------|
-| `smoke` | 30K | 1 | 能跑完、MDD 方向不惡化 | reward / env 改動初篩 |
-| `candidate` | 150K | 2 | 2025H1 MDD 改善趨勢 | 確認是否值得 full run |
+| `smoke` | 300K | 1 | 能跑完、MDD 方向不惡化 | reward / env 改動初篩 |
+| `candidate` | 300K | 2 | 2025H1 MDD 改善趨勢 | 確認是否值得 full run |
 | `promotion` | 300K | 3 | 通過 Drawdown Gate | 僅最佳候選 + 1 對照 |
 
 **規則**：
@@ -28,18 +28,18 @@
 ## 2. CLI 用法
 
 ```bash
-# Smoke：改 reward 後最快的健全性檢查（30K, seed 42）
+# Smoke：改 reward 後健全性檢查（300K, seed 42）
 python walk_forward.py --tier smoke --algo sac --cash-mode enabled
 
-# Candidate：確認改善趨勢（150K, seed 42,43）
+# Candidate：確認改善趨勢（300K, seed 42,43）
 python walk_forward.py --tier candidate --algo sac --cash-mode enabled
 
 # Promotion：最佳候選 + 對照（300K, seed 42,43,44）
 python walk_forward.py --tier promotion --algo sac --cash-mode enabled
 python walk_forward.py --tier promotion --algo ppo --cash-mode disabled
 
-# 不帶 --tier 時沿用舊行為（--timesteps / --seeds 明確值）
-python walk_forward.py --timesteps 150000 --seeds 42,43,44
+# 不帶 --tier 時沿用 walk_forward_timesteps 預設（300K）
+python walk_forward.py --seeds 42,43,44
 ```
 
 `--tier` 會覆寫 `--timesteps` 與 `--seeds`。也可用環境變數 `RESEARCH_TIER=smoke` 設預設。
