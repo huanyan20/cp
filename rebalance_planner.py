@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import json
 
-from signal_validator import load_signal, _normalize_sid, record_signal
+from signal_validator import _normalize_sid, load_signal, record_signal
+
 
 def build_dry_run_diff(signal: dict, inventory: list[dict]) -> dict:
     target_lots = signal.get("target_lots", {})

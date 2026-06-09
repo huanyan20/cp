@@ -117,7 +117,7 @@ def load_datasets(overnight_feature_path=None):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--timesteps", type=int, default=50_000)
+    parser.add_argument("--timesteps", type=int, default=300_000)
     parser.add_argument("--n-trials", type=int, default=20)
     parser.add_argument(
         "--overnight-feature-path",

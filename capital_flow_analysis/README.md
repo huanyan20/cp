@@ -93,7 +93,5 @@ python -m pytest
 
 ## Notes
 
-- `MACRO_TICKERS_RL` is the smaller macro universe used by the RL portfolio.
-- `MACRO_TICKERS_FLOW` is the broader macro universe used by flow analysis.
-- Data caches and generated reports are runtime artifacts and should not be
-  committed by default.
+- `MACRO_TICKERS_RL` / `MACRO_TICKERS_FLOW` 分離規則見 [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) §6。
+- 研究原則與能力矩陣見 [`docs/README.md`](docs/README.md)。

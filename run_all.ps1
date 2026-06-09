@@ -1,5 +1,5 @@
 param(
-    [int]$Timesteps = 1000,
+    [int]$Timesteps = 300000,
     [string]$Seeds = "42,43,44",
     [int]$Workers = 4
 )

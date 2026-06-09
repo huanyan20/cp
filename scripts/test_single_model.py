@@ -7,8 +7,8 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-# Add project to path
-ROOT_DIR = Path(__file__).resolve().parent
+# Add project to path (script lives in scripts/, repo root is one level up)
+ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
 from stable_baselines3 import PPO, SAC  # noqa: E402

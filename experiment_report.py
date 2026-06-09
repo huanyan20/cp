@@ -6,8 +6,24 @@ import re
 
 import pandas as pd
 
+from env_config import (
+    ENV_CONFIG_VERSION,
+    build_env_config_snapshot,
+    get_current_env_config_hash,
+)
 from promotion_gate import run_promotion_gate
 from settings import load_settings
+from sl_pipeline.comparison import (
+    build_sl_vs_rl_comparison,
+    gate_comparison_markdown,
+    overall_comparison_markdown,
+    period_comparison_markdown,
+)
+from sl_pipeline.gate import (
+    promotion_result_to_dict,
+    read_sl_metric_files,
+    run_sl_promotion_gate,
+)
 
 SETTINGS = load_settings()
 
@@ -52,6 +68,81 @@ def _read_metric_files(results_dir: str):
     return records
 
 
+def _filter_records_by_env_config(
+    records: list[dict],
+    env_config_hash: str | None = None,
+    env_config_version: str | None = None,
+    current_env_only: bool = True,
+) -> tuple[list[dict], list[str]]:
+    """Keep metrics comparable; exclude mixed reward/env generations by default."""
+    notes: list[str] = []
+    if not records:
+        return records, notes
+
+    if env_config_hash:
+        matched = [r for r in records if r.get("env_config_hash") == env_config_hash]
+        if not matched:
+            notes.append(
+                f"No metrics matched env_config_hash={env_config_hash}; "
+                f"found hashes: {sorted({r.get('env_config_hash', 'legacy') for r in records})}."
+            )
+        else:
+            notes.append(f"Filtered to env_config_hash={env_config_hash} ({len(matched)} file(s)).")
+        return matched, notes
+
+    if env_config_version:
+        matched = [
+            r for r in records
+            if r.get("env_config_version") == env_config_version
+        ]
+        if not matched:
+            notes.append(
+                f"No metrics matched env_config_version={env_config_version}; "
+                f"found versions: {sorted({r.get('env_config_version', 'legacy') for r in records})}."
+            )
+        else:
+            notes.append(
+                f"Filtered to env_config_version={env_config_version} ({len(matched)} file(s))."
+            )
+        return matched, notes
+
+    if not current_env_only:
+        hashes = {r.get("env_config_hash") for r in records if r.get("env_config_hash")}
+        if len(hashes) > 1:
+            notes.append(
+                "Multiple env_config_hash values detected; including all (--include-all-env-configs)."
+            )
+        return records, notes
+
+    current_hash = get_current_env_config_hash(SETTINGS)
+    matched = [r for r in records if r.get("env_config_hash") == current_hash]
+    legacy = [r for r in records if "env_config_hash" not in r]
+
+    if matched:
+        if legacy:
+            notes.append(
+                f"Excluded {len(legacy)} legacy metric file(s) without env_config_hash "
+                f"(current={current_hash}, version={ENV_CONFIG_VERSION})."
+            )
+        if len({r.get("env_config_hash") for r in matched}) > 1:
+            notes.append("Multiple env_config_hash values remain after filter.")
+        else:
+            notes.append(
+                f"Using current env config only: version={ENV_CONFIG_VERSION}, hash={current_hash} "
+                f"({len(matched)} file(s))."
+            )
+        return matched, notes
+
+    if legacy:
+        notes.append(
+            f"No metrics tagged with current env_config_hash={current_hash}; "
+            f"falling back to {len(legacy)} legacy file(s)."
+        )
+        return legacy, notes
+
+    return records, notes
+
+
 def _read_optional_json(path):
     if not os.path.exists(path):
         return {}
@@ -74,6 +165,66 @@ def _fmt_mean_std(mean, std, kind):
     if pd.isna(std):
         std = 0.0
     return f"{_fmt(mean, kind)} +/- {_fmt(std, kind)}"
+
+
+def _sl_summary_markdown(raw_summary: list[dict]) -> str:
+    if not raw_summary:
+        return "No SL baseline metrics found (`metrics_sl_*.json`).\n"
+    rows = []
+    for entry in raw_summary:
+        rows.append(
+            {
+                "Strategy": entry.get("variant", "sl_rule"),
+                "Horizon": f"{entry.get('horizon', 5)}d",
+                "Seeds": len(entry.get("seeds", [])),
+                "OOS Sortino": _fmt_mean_std(
+                    entry.get("sortino_mean", 0.0),
+                    entry.get("sortino_std", 0.0),
+                    "number",
+                ),
+                "Max Drawdown": _fmt_mean_std(
+                    entry.get("max_drawdown_mean", 0.0),
+                    entry.get("max_drawdown_std", 0.0),
+                    "pct",
+                ),
+                "Total Return": _fmt_mean_std(
+                    entry.get("total_return_mean", 0.0),
+                    entry.get("total_return_std", 0.0),
+                    "pct",
+                ),
+                "Turnover": _fmt_mean_std(
+                    entry.get("turnover_mean", 0.0),
+                    entry.get("turnover_std", 0.0),
+                    "pct",
+                ),
+                "Cash Behavior": entry.get("cash_behavior", "n/a"),
+            }
+        )
+    return pd.DataFrame(rows).to_markdown(index=False) + "\n"
+
+
+def _sl_period_markdown(period_df: pd.DataFrame) -> str:
+    if period_df.empty:
+        return "No SL period breakdown.\n"
+    lines = []
+    for period in sorted(period_df["period"].unique()):
+        sub = period_df[period_df["period"] == period]
+        rows = []
+        for _, row in sub.iterrows():
+            rows.append(
+                {
+                    "Seed": row.get("seed"),
+                    "Total Return": _fmt(row.get("total_return", 0.0), "pct"),
+                    "Max Drawdown": _fmt(row.get("max_drawdown", 0.0), "pct"),
+                    "Sortino": _fmt(row.get("sortino", 0.0), "number"),
+                    "Turnover": _fmt(row.get("turnover", 0.0), "pct"),
+                    "Avg Cash": _fmt(row.get("avg_cash_weight", 0.0), "pct"),
+                }
+            )
+        lines.append(f"### {period}\n\n")
+        lines.append(pd.DataFrame(rows).to_markdown(index=False))
+        lines.append("\n\n")
+    return "".join(lines)
 
 
 def _overall_dataframe(records):
@@ -152,10 +303,15 @@ def _summary_tables(overall_df, period_df):
 
     summary_df = pd.DataFrame(summary_rows)
     if not summary_df.empty:
-        raw_df = pd.DataFrame(raw_summary).sort_values(
-            by=["sortino_mean", "max_drawdown_mean", "total_return_mean"],
-            ascending=[False, True, False],
-        )
+        # O3: base variant is the main ranking; with_features is a risk overlay and
+        # must never outrank base. Sort base-first, then by Sortino/MDD/return. When
+        # only with_features results exist, the best overlay still falls through.
+        raw_df = pd.DataFrame(raw_summary)
+        raw_df["_variant_rank"] = (raw_df["variant"] != "base").astype(int)
+        raw_df = raw_df.sort_values(
+            by=["_variant_rank", "sortino_mean", "max_drawdown_mean", "total_return_mean"],
+            ascending=[True, False, True, False],
+        ).drop(columns=["_variant_rank"])
         sorted_pairs = [
             (row["algo"].upper(), row["cash_mode"], row["variant"])
             for _, row in raw_df.iterrows()
@@ -268,57 +424,127 @@ def generate_report(
     results_dir="results_dir",
     output_md=None,
     output_json=None,
+    env_config_hash: str | None = None,
+    env_config_version: str | None = None,
+    current_env_only: bool = True,
 ):
     output_md = output_md or str(SETTINGS.paths.experiment_report_md)
     output_json = output_json or str(SETTINGS.paths.experiment_summary_json)
+    env_config_hash = env_config_hash or SETTINGS.research.env_config_hash
+    env_config_version = env_config_version or SETTINGS.research.env_config_version
+    current_env_config = build_env_config_snapshot(SETTINGS)
+
     print(f"=== Generate experiment report from {results_dir} ===")
-    records = _read_metric_files(results_dir)
-    if not records:
-        print("No metrics_*.json files found.")
+    all_records = _read_metric_files(results_dir)
+    sl_records = read_sl_metric_files(results_dir)
+    if not all_records and not sl_records:
+        print("No RL or SL metrics files found.")
         return
 
-    overall_df = _overall_dataframe(records)
-    period_df = _period_dataframe(records)
-    summary_df, raw_summary, period_summary_df = _summary_tables(overall_df, period_df)
-    conclusions = _make_conclusions(raw_summary, period_df)
+    records: list[dict] = []
+    filter_notes: list[str] = []
+    if all_records:
+        records, filter_notes = _filter_records_by_env_config(
+            all_records,
+            env_config_hash=env_config_hash,
+            env_config_version=env_config_version,
+            current_env_only=current_env_only,
+        )
+        for note in filter_notes:
+            print(f"[env_config] {note}")
+        if not records:
+            print("No RL metrics remain after env_config filter.")
+
+    overall_df = _overall_dataframe(records) if records else pd.DataFrame()
+    period_df = _period_dataframe(records) if records else pd.DataFrame()
+    summary_df, raw_summary, period_summary_df = (
+        _summary_tables(overall_df, period_df) if records else (pd.DataFrame(), [], pd.DataFrame())
+    )
+    conclusions = _make_conclusions(raw_summary, period_df) if records else []
     baseline_summary = _read_optional_json(os.path.join(results_dir, "baseline_summary.json"))
     ablation_summary = _read_optional_json(os.path.join(results_dir, "ablation_summary.json"))
     stress_summary = _read_optional_json(os.path.join(results_dir, "stress_summary.json"))
 
-    # Run promotion gate analysis
-    promotion_result = run_promotion_gate(
-        raw_summary=raw_summary,
-        period_df=period_df if not period_df.empty else None,
-        baseline_summary=baseline_summary,
-        ablation_summary=ablation_summary,
-        stress_summary=stress_summary,
-        # Use configurable thresholds from settings if available
-        min_seeds=getattr(SETTINGS.research, "promotion_min_seeds", 3),
-        sortino_threshold=getattr(SETTINGS.research, "promotion_sortino_threshold", 0.8),
-        max_drawdown_limit=getattr(SETTINGS.research, "promotion_max_drawdown", 0.35),
-        turnover_limit=getattr(SETTINGS.research, "promotion_turnover_limit", 0.10),
-    )
+    sl_promotion_result = None
+    sl_raw_summary: list[dict] = []
+    sl_period_df = pd.DataFrame()
+    if sl_records:
+        sl_promotion_result, sl_raw_summary, sl_period_df = run_sl_promotion_gate(
+            results_dir=results_dir
+        )
+
+    sl_vs_rl: dict = {}
+    promotion_result = None
+    if raw_summary:
+        promotion_result = run_promotion_gate(
+            raw_summary=raw_summary,
+            period_df=period_df if not period_df.empty else None,
+            baseline_summary=baseline_summary,
+            ablation_summary=ablation_summary,
+            stress_summary=stress_summary,
+            min_seeds=getattr(SETTINGS.research, "promotion_min_seeds", 3),
+            sortino_threshold=getattr(SETTINGS.research, "promotion_sortino_threshold", 0.8),
+            max_drawdown_limit=getattr(SETTINGS.research, "promotion_max_drawdown", 0.35),
+            turnover_limit=getattr(SETTINGS.research, "promotion_turnover_limit", 0.10),
+        )
+
+    if raw_summary and sl_raw_summary:
+        sl_vs_rl = build_sl_vs_rl_comparison(
+            raw_summary=raw_summary,
+            sl_raw_summary=sl_raw_summary,
+            period_df=period_df,
+            sl_period_df=sl_period_df,
+            rl_promotion=promotion_result,
+            sl_promotion=sl_promotion_result,
+        )
+        if records:
+            best_rl_record = next(
+                (
+                    r
+                    for r in records
+                    if r.get("algo") == sl_vs_rl["rl_candidate"].get("algo")
+                    and r.get("cash_mode") == sl_vs_rl["rl_candidate"].get("cash_mode")
+                    and r.get("variant") == sl_vs_rl["rl_candidate"].get("variant")
+                ),
+                records[0],
+            )
+            sl_vs_rl["rl_candidate"]["env_config_version"] = best_rl_record.get(
+                "env_config_version"
+            )
 
     md = "# Experiment Report\n\n"
     md += "> Generated by `experiment_report.py`.\n"
     md += "> Ranking priority: `OOS Sortino` first, then lower `Max Drawdown`, then higher `Total Return`.\n"
-    md += "> Metrics are grouped by `algo`, `cash_mode`, and `variant` so feature experiments do not mix with base runs.\n\n"
+    md += "> Metrics are grouped by `algo`, `cash_mode`, and `variant` so feature experiments do not mix with base runs.\n"
+    md += (
+        f"> Env config filter: version=`{ENV_CONFIG_VERSION}`, "
+        f"hash=`{current_env_config['hash']}` "
+        f"({len(records)}/{len(all_records)} metric file(s) included).\n"
+    )
+    for note in filter_notes:
+        md += f"> {note}\n"
+    md += "\n"
 
-    # Add promotion gate result prominently
-    md += "## 0. Promotion Decision\n\n"
-    if promotion_result.can_promote:
-        md += "### ✓ MODEL ELIGIBLE FOR PROMOTION\n\n"
+    md += "## 0. Promotion Decision (RL)\n\n"
+    if promotion_result is not None:
+        if promotion_result.can_promote:
+            md += "### ✓ MODEL ELIGIBLE FOR PROMOTION\n\n"
+        else:
+            md += "### ✗ MODEL NOT ELIGIBLE FOR PROMOTION\n\n"
+        md += f"Risk Level: **{promotion_result.risk_level.upper()}**\n\n"
+        for gate in promotion_result.gates:
+            status = "✓" if gate.passed else "✗"
+            md += f"- {status} **{gate.name}**: {gate.message}\n"
+        md += f"\n**Summary**: {promotion_result.summary}\n\n"
     else:
-        md += "### ✗ MODEL NOT ELIGIBLE FOR PROMOTION\n\n"
-    md += f"Risk Level: **{promotion_result.risk_level.upper()}**\n\n"
-    for gate in promotion_result.gates:
-        status = "✓" if gate.passed else "✗"
-        md += f"- {status} **{gate.name}**: {gate.message}\n"
-    md += f"\n**Summary**: {promotion_result.summary}\n\n"
+        md += "_No RL walk-forward metrics in scope; see §8 SL Baseline._\n\n"
 
     md += "## 1. Conclusions\n\n"
-    for line in conclusions:
-        md += f"- {line}\n"
+    if conclusions:
+        for line in conclusions:
+            md += f"- {line}\n"
+    else:
+        md += "- RL conclusions skipped (no RL metrics after filter).\n"
 
     md += "\n## 2. Promotion Checklist\n\n"
     md += "- At least 3 seeds should show stable Sortino before promotion.\n"
@@ -328,7 +554,26 @@ def generate_report(
     md += "- Capital-flow overnight features must beat the baseline in ablation before becoming a default input.\n"
 
     md += "\n## 3. Walk-Forward Summary\n\n"
-    md += summary_df.to_markdown(index=False) if not summary_df.empty else "No summary data."
+    if summary_df.empty:
+        md += "No summary data."
+    else:
+        base_df = summary_df[summary_df["Variant"] == "base"].drop(columns=["Variant"])
+        overlay_df = summary_df[summary_df["Variant"] == "with_features"].drop(
+            columns=["Variant"]
+        )
+        md += "### 3a. Main Ranking (base features)\n\n"
+        md += base_df.to_markdown(index=False) if not base_df.empty else "No base-feature runs."
+        md += "\n\n### 3b. Risk Overlay (with_features — not in main ranking)\n\n"
+        md += (
+            "> overnight features are a risk-suppression overlay (R5/O6). They reduce drawdown "
+            "and turnover but historically hurt Sortino/return, so they are excluded from the "
+            "main promotion ranking.\n\n"
+        )
+        md += (
+            overlay_df.to_markdown(index=False)
+            if not overlay_df.empty
+            else "No with_features overlay runs."
+        )
     md += "\n\n## 4. Period Breakdown\n\n"
     if not period_summary_df.empty:
         for period in sorted(period_summary_df["Period"].unique()):
@@ -371,12 +616,73 @@ def generate_report(
     else:
         md += "- Stress test summary missing; add fee and slippage sensitivity before promotion.\n"
 
+    md += "\n## 8. SL Baseline (Supervised Learning)\n\n"
+    md += (
+        "> Isolated from RL main ranking. Run: "
+        "`python -m sl_pipeline.walk_forward_sl --allocator rule --gate`.\n\n"
+    )
+    if sl_raw_summary:
+        best_sl = sl_raw_summary[0]
+        md += (
+            f"Best SL config: **{best_sl.get('variant', 'sl_rule')}** "
+            f"(Sortino {_fmt(best_sl.get('sortino_mean', 0.0), 'number')}, "
+            f"MDD {_fmt(best_sl.get('max_drawdown_mean', 0.0), 'pct')}).\n\n"
+        )
+        md += "### 8a. SL Summary\n\n"
+        md += _sl_summary_markdown(sl_raw_summary)
+        md += "\n### 8b. SL Period Breakdown\n\n"
+        md += _sl_period_markdown(sl_period_df)
+        if sl_promotion_result is not None:
+            md += "### 8c. SL Promotion Gate\n\n"
+            status = "ELIGIBLE" if sl_promotion_result.can_promote else "BLOCKED"
+            md += f"**{status}** (risk: {sl_promotion_result.risk_level.upper()})\n\n"
+            for gate in sl_promotion_result.gates:
+                mark = "✓" if gate.passed else "✗"
+                md += f"- {mark} **{gate.name}**: {gate.message}\n"
+            md += f"\n{sl_promotion_result.summary}\n"
+        if sl_vs_rl:
+            md += "\n### 8d. SL vs RL Comparison (R6)\n\n"
+            md += (
+                "> Best RL = top of §3a main ranking (current env). "
+                "Best SL = top of §8a. Same walk-forward periods and Gate thresholds.\n\n"
+            )
+            if sl_vs_rl.get("rl_candidate", {}).get("label"):
+                md += f"- **RL candidate**: {sl_vs_rl['rl_candidate']['label']}"
+                env_ver = sl_vs_rl["rl_candidate"].get("env_config_version")
+                if env_ver:
+                    md += f" (env `{env_ver}`)"
+                md += "\n"
+            if sl_vs_rl.get("sl_candidate", {}).get("label"):
+                md += f"- **SL candidate**: {sl_vs_rl['sl_candidate']['label']}\n"
+            md += "\n#### Overall Metrics\n\n"
+            md += overall_comparison_markdown(sl_vs_rl)
+            md += "\n#### Per-Period\n\n"
+            md += period_comparison_markdown(sl_vs_rl)
+            md += "\n#### Gate Status\n\n"
+            md += gate_comparison_markdown(sl_vs_rl)
+            md += "\n#### Verdict\n\n"
+            for line in sl_vs_rl.get("verdict", []):
+                md += f"- {line}\n"
+    else:
+        md += (
+            "No `metrics_sl_*.json` found. Generate with "
+            "`python -m sl_pipeline.walk_forward_sl --allocator rule --gate`.\n"
+        )
+
     with open(output_md, "w", encoding="utf-8") as f:
         f.write(md)
 
     # Add promotion result to JSON
     summary_dict = {
         "ranking": ["sortino desc", "max_drawdown asc", "total_return desc"],
+        "env_config_filter": {
+            "version": ENV_CONFIG_VERSION,
+            "hash": current_env_config["hash"],
+            "snapshot": current_env_config,
+            "included_files": len(records),
+            "total_files": len(all_records),
+            "notes": filter_notes,
+        },
         "conclusions": conclusions,
         "summary": raw_summary,
         "baselines": baseline_summary,
@@ -384,20 +690,34 @@ def generate_report(
         "stress_tests": stress_summary,
         "source_files": [r["path"] for r in records],
         # New: Promotion gate result
-        "promotion_gate": {
-            "can_promote": promotion_result.can_promote,
-            "risk_level": promotion_result.risk_level,
-            "summary": promotion_result.summary,
-            "gates": [
-                {
-                    "name": g.name,
-                    "passed": g.passed,
-                    "message": g.message,
-                    "details": g.details,
-                }
-                for g in promotion_result.gates
-            ],
+        "promotion_gate": (
+            {
+                "can_promote": promotion_result.can_promote,
+                "risk_level": promotion_result.risk_level,
+                "summary": promotion_result.summary,
+                "gates": [
+                    {
+                        "name": g.name,
+                        "passed": g.passed,
+                        "message": g.message,
+                        "details": g.details,
+                    }
+                    for g in promotion_result.gates
+                ],
+            }
+            if promotion_result is not None
+            else None
+        ),
+        "sl_baseline": {
+            "summary": sl_raw_summary,
+            "source_files": [r["path"] for r in sl_records],
+            "promotion_gate": (
+                promotion_result_to_dict(sl_promotion_result)
+                if sl_promotion_result is not None
+                else None
+            ),
         },
+        "sl_vs_rl_comparison": sl_vs_rl or None,
     }
 
     with open(output_json, "w", encoding="utf-8") as f:
@@ -407,7 +727,10 @@ def generate_report(
     print(f"[OK] wrote {output_json}")
     if not summary_df.empty:
         print(summary_df.to_markdown(index=False))
-    print(f"\n{promotion_result}")
+    if promotion_result is not None:
+        print(f"\n{promotion_result}")
+    if sl_promotion_result is not None:
+        print(f"\nSL Gate: {sl_promotion_result}")
 
 
 if __name__ == "__main__":
@@ -415,9 +738,29 @@ if __name__ == "__main__":
     parser.add_argument("--dir", type=str, default="results_dir", help="Results directory")
     parser.add_argument("--output-md", type=str, default="experiment_report.md")
     parser.add_argument("--output-json", type=str, default="experiment_summary.json")
+    parser.add_argument(
+        "--env-config-hash",
+        type=str,
+        default=None,
+        help="Only include metrics with this 8-char env_config_hash",
+    )
+    parser.add_argument(
+        "--env-config-version",
+        type=str,
+        default=None,
+        help="Only include metrics with this env_config_version label (e.g. r4)",
+    )
+    parser.add_argument(
+        "--include-all-env-configs",
+        action="store_true",
+        help="Disable current-env-only filter and include every metrics_*.json",
+    )
     args = parser.parse_args()
     generate_report(
         results_dir=args.dir,
         output_md=args.output_md,
         output_json=args.output_json,
+        env_config_hash=args.env_config_hash,
+        env_config_version=args.env_config_version,
+        current_env_only=not args.include_all_env_configs,
     )

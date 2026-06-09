@@ -19,7 +19,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(app_settings.research.train_start, "2020-01-01")
         self.assertEqual(app_settings.research.train_end, "2023-12-31")
         self.assertEqual(app_settings.research.timesteps, 300_000)
-        self.assertEqual(app_settings.research.walk_forward_timesteps, 150_000)
+        self.assertEqual(app_settings.research.walk_forward_timesteps, 300_000)
         self.assertEqual(app_settings.research.walk_forward_cash_mode, "enabled")
         self.assertEqual(app_settings.research.default_topk, 5)
         self.assertEqual(app_settings.research.default_softmax_temp, 0.5)
@@ -57,6 +57,25 @@ class SettingsTests(unittest.TestCase):
             evaluate_portfolio.TEST_START,
             evaluate_portfolio.SETTINGS.evaluation.test_start,
         )
+
+
+class TrainingTierTests(unittest.TestCase):
+    def test_research_tier_defaults_to_opt_out(self):
+        app_settings = settings.load_settings()
+        self.assertEqual(app_settings.research.research_tier, "")
+
+    def test_resolve_tier_maps_timesteps_and_truncates_seeds(self):
+        base_seeds = [42, 43, 44]
+        self.assertEqual(settings.resolve_tier("smoke", base_seeds), (300_000, [42]))
+        self.assertEqual(settings.resolve_tier("candidate", base_seeds), (300_000, [42, 43]))
+        self.assertEqual(settings.resolve_tier("promotion", base_seeds), (300_000, [42, 43, 44]))
+
+    def test_resolve_tier_is_case_insensitive(self):
+        self.assertEqual(settings.resolve_tier("PROMOTION", [42, 43, 44])[0], 300_000)
+
+    def test_resolve_tier_rejects_unknown_tier(self):
+        with self.assertRaises(ValueError):
+            settings.resolve_tier("turbo", [42])
 
 
 if __name__ == "__main__":

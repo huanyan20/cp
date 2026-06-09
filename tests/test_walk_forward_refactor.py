@@ -5,6 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import walk_forward
 from research_pipeline import (
     build_artifact_paths,
     build_pending_walk_forward_tasks,
@@ -71,7 +72,7 @@ class WalkForwardRefactorTests(unittest.TestCase):
             cash_mode="enabled",
             enable_cash_action=True,
             enable_margin_short=False,
-            timesteps=150_000,
+            timesteps=300_000,
         )
         self.assertEqual(metrics["train_test_period"], "Walk-Forward")
         self.assertEqual(metrics["periods"], {})
@@ -80,6 +81,15 @@ class WalkForwardRefactorTests(unittest.TestCase):
             path = Path(tmp) / "nested" / "metrics.json"
             write_metrics_json(metrics, str(path))
             self.assertTrue(path.exists())
+
+
+class CandidateSetTests(unittest.TestCase):
+    def test_candidate_pairs_are_the_two_best_performers(self):
+        self.assertEqual(walk_forward.CANDIDATE_PAIRS, [("sac", True), ("ppo", False)])
+
+    def test_run_candidate_set_is_exported(self):
+        self.assertIn("run_candidate_set", walk_forward.__all__)
+        self.assertTrue(callable(walk_forward.run_candidate_set))
 
 
 if __name__ == "__main__":

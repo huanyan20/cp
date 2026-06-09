@@ -7,7 +7,7 @@ from pathlib import Path
 
 from stable_baselines3 import PPO, SAC
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 
 # Model files to test
 MODEL_FILES = [

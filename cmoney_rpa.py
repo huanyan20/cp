@@ -2,16 +2,59 @@ import argparse
 import json
 import os
 import time
-from datetime import UTC, datetime
 
 import requests
 import yfinance as yf
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-# P6: account-config logic extracted to cmoney_client; imported here for backward compat
-from cmoney_client import get_accounts_config, get_auto_aids  # noqa: F401
+# P6: account-config logic extracted to cmoney_client; re-exported for backward compat.
+# signal-validation and rebalance-planning were likewise extracted to dedicated modules
+# and re-exported here (see __all__) so existing callers of ``cmoney_rpa.<symbol>`` keep
+# working. ``_read_execution_log`` / ``_write_execution_log`` are also used internally.
+from cmoney_client import get_accounts_config, get_auto_aids
+from rebalance_planner import (
+    _current_lots_from_rpa,
+    build_dry_run_diff,
+    build_rebalance_plan,
+    run_signal_file,
+    write_dry_run_diff,
+)
+from signal_validator import (
+    EXECUTION_LOG_FILE,
+    SignalError,
+    _normalize_sid,
+    _read_execution_log,
+    _validate_created_at,
+    _write_execution_log,
+    load_signal,
+    record_signal,
+    signal_was_executed,
+)
 from stock_universe import TICKERS_TECH_EXPANDED
+
+# Backward-compat public surface: names extracted during P6 but still importable as
+# ``cmoney_rpa.<symbol>``. Listing them in __all__ marks the re-exports as intentional.
+__all__ = [
+    "CMoneyRPA",
+    "EXECUTION_LOG_FILE",
+    "SignalError",
+    "TICKERS_TECH_EXPANDED",
+    "_current_lots_from_rpa",
+    "_normalize_sid",
+    "_read_execution_log",
+    "_validate_created_at",
+    "_write_execution_log",
+    "build_dry_run_diff",
+    "build_rebalance_plan",
+    "get_accounts_config",
+    "get_auto_aids",
+    "load_signal",
+    "record_signal",
+    "run_signal_file",
+    "signal_was_executed",
+    "write_dry_run_diff",
+]
 
 
 class CMoneyRPA:
@@ -232,7 +275,6 @@ class CMoneyRPA:
         executed_key = f"{signal_id}_{current_aid}"
         sell_done_key = f"{signal_id}_{current_aid}_sell_done"
 
-        from signal_validator import _read_execution_log, _write_execution_log
         # 檢查是否已執行過（完整完成 或 sell-only 模式下的賣單已送出）
         executed_signals = _read_execution_log()
 
@@ -470,7 +512,6 @@ class CMoneyRPA:
             print(f"[RPA] [{self.account_name}] 無 Pending BUY 單需要執行。")
             return
 
-        from signal_validator import _read_execution_log, _write_execution_log
         executed_signals = _read_execution_log()
 
         for pending_path in pending_files:
@@ -577,30 +618,9 @@ class CMoneyRPA:
                     )
 
 
-# get_auto_aids and get_accounts_config are now defined in cmoney_client.
-# They are imported at the top of this module so that existing callers of
-# ``cmoney_rpa.get_auto_aids`` / ``cmoney_rpa.get_accounts_config`` still work.
+# Backward-compat re-exports (get_accounts_config / get_auto_aids from cmoney_client,
+# signal_validator and rebalance_planner symbols) are imported at the top of this module.
 
-
-
-from signal_validator import (
-    EXECUTION_LOG_FILE,
-    SignalError,
-    _normalize_sid,
-    _read_execution_log,
-    _write_execution_log,
-    record_signal,
-    signal_was_executed,
-    _validate_created_at,
-    load_signal,
-)
-from rebalance_planner import (
-    build_dry_run_diff,
-    write_dry_run_diff,
-    build_rebalance_plan,
-    _current_lots_from_rpa,
-    run_signal_file,
-)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CMoney RPA 交易執行器")

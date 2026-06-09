@@ -118,7 +118,9 @@ def _softsign(x: float) -> float:
 - sortino component：下行風險調整後報酬。
 - benchmark component：相對 momentum top-3 benchmark 的超額報酬。
 - cost penalty：交易成本懲罰。
-- drawdown penalty：超過門檻後的回撤懲罰。
+- drawdown penalty：超過緩衝後的回撤懲罰（R4: `LAMBDA_DRAWDOWN=0.8`，緩衝 3%）。
+- regime penalty：DD>8% 時對高股票曝險額外懲罰（R4: 門檻 8%，係數 1.0）。
+- defensive cash bonus：DD>8% 且 `enable_cash_action=True` 時，持有現金獲正向獎勵（R4: `LAMBDA_CASH_DEFENSIVE=0.2`）。
 
 評估時需要同時看：
 

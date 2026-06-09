@@ -9,8 +9,8 @@ from pathlib import Path
 
 from cmoney_rpa import CMoneyRPA
 from rebalance_planner import build_dry_run_diff
-from signal_validator import load_signal
 from settings import load_settings
+from signal_validator import load_signal
 
 SETTINGS = load_settings()
 

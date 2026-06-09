@@ -43,6 +43,30 @@ def _env_optional_str(name: str, default: str | None) -> str | None:
     return value or None
 
 
+# O2 — layered training protocol. Tiers differ by seed count; timesteps fixed at 300K.
+TIER_PRESETS: dict[str, dict[str, int]] = {
+    "smoke": {"timesteps": 300_000, "seeds": 1},
+    "candidate": {"timesteps": 300_000, "seeds": 2},
+    "promotion": {"timesteps": 300_000, "seeds": 3},
+}
+
+
+def resolve_tier(tier: str, base_seeds: list[int]) -> tuple[int, list[int]]:
+    """Map a research tier to (timesteps, seeds) using the first N base seeds.
+
+    Raises ValueError for unknown tiers so CLI typos fail fast.
+    """
+    key = (tier or "").strip().lower()
+    if key not in TIER_PRESETS:
+        raise ValueError(
+            f"Unknown research tier: {tier!r}. Expected one of {sorted(TIER_PRESETS)}."
+        )
+    preset = TIER_PRESETS[key]
+    seed_count = max(1, preset["seeds"])
+    seeds = base_seeds[:seed_count] if base_seeds else []
+    return preset["timesteps"], seeds
+
+
 @dataclass(frozen=True)
 class ResearchSettings:
     train_start: str = field(default_factory=lambda: _env_str("RESEARCH_TRAIN_START", "2020-01-01"))
@@ -50,11 +74,13 @@ class ResearchSettings:
     test_start: str = field(default_factory=lambda: _env_str("RESEARCH_TEST_START", "2024-01-01"))
     window_size: int = field(default_factory=lambda: _env_int("RESEARCH_WINDOW_SIZE", 20))
     timesteps: int = field(default_factory=lambda: _env_int("RESEARCH_TIMESTEPS", 300_000))
-    walk_forward_timesteps: int = field(default_factory=lambda: _env_int("WALK_FORWARD_TIMESTEPS", 150_000))
+    walk_forward_timesteps: int = field(default_factory=lambda: _env_int("WALK_FORWARD_TIMESTEPS", 300_000))
     default_algo: str = field(default_factory=lambda: _env_str("RESEARCH_ALGO", "ppo"))
     default_seed: int = field(default_factory=lambda: _env_int("RESEARCH_SEED", 42))
     default_seeds: str = field(default_factory=lambda: _env_str("RESEARCH_SEEDS", "42,43,44"))
     walk_forward_cash_mode: str = field(default_factory=lambda: _env_str("WALK_FORWARD_CASH_MODE", "enabled"))
+    # O2: optional training tier (smoke|candidate|promotion); empty keeps explicit timesteps/seeds.
+    research_tier: str = field(default_factory=lambda: _env_str("RESEARCH_TIER", ""))
     default_topk: int = field(default_factory=lambda: _env_int("RESEARCH_TOPK", 5))
     default_softmax_temp: float = field(default_factory=lambda: _env_float("RESEARCH_SOFTMAX_TEMP", 0.5))
     default_enable_cash_action: bool = field(default_factory=lambda: _env_bool("RESEARCH_ENABLE_CASH_ACTION", False))
@@ -77,6 +103,13 @@ class ResearchSettings:
     )
     promotion_turnover_limit: float = field(
         default_factory=lambda: _env_float("PROMOTION_TURNOVER_LIMIT", 0.10)
+    )
+    # O1: filter experiment_report to a specific env_config_hash (8-char); empty = auto
+    env_config_hash: str | None = field(
+        default_factory=lambda: _env_optional_str("RESEARCH_ENV_CONFIG_HASH", None)
+    )
+    env_config_version: str | None = field(
+        default_factory=lambda: _env_optional_str("RESEARCH_ENV_CONFIG_VERSION", None)
     )
 
 

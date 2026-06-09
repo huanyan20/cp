@@ -37,7 +37,7 @@ class EntCoefScheduleCallback(BaseCallback):
         self,
         ent_coef_start: float = 0.05,
         ent_coef_end: float = 0.001,
-        total_timesteps: int = 200_000,
+        total_timesteps: int = 300_000,
         verbose: int = 0,
     ):
         super().__init__(verbose)

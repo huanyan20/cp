@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 P4/P5 重構計畫驗證檢查
-验证 P4 和 P5 的实现是否符合 重構計畫.md 的要求
+验证 P4 和 P5 的实现是否符合 docs/archive/重構計畫_P0-P6.md 的要求
 """
 
 import sys
@@ -12,7 +12,7 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[0]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 print("=" * 80)
 print("P4/P5 重構計畫驗證檢查")

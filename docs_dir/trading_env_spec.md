@@ -1,6 +1,6 @@
 # TaiwanStockEnv Specification
 
-Updated: 2026-06-07
+Updated: 2026-06-08 (R4 reward tuning + O1 env_config versioning)
 
 `TaiwanStockEnv` is a Gymnasium environment for Taiwan stock portfolio allocation
 experiments. It supports long-only allocation, optional cash allocation, and an
@@ -104,13 +104,14 @@ Short borrow cost and margin loan interest are charged during portfolio updates.
 
 ## Reward
 
-Current reward constants:
+Current reward constants (updated R4, 2026-06-08):
 
 ```python
-LAMBDA_COST = 5.0
-LAMBDA_TURNOVER = 1.0
-LAMBDA_CASH = 0.0
-LAMBDA_DRAWDOWN = 0.3
+LAMBDA_COST = 5.0            # transaction friction penalty
+LAMBDA_TURNOVER = 1.0        # portfolio churn penalty
+LAMBDA_CASH = 0.0            # static cash penalty (disabled)
+LAMBDA_DRAWDOWN = 0.8        # R4: raised from 0.3 → 0.8
+LAMBDA_CASH_DEFENSIVE = 0.2  # R4: new — rewards holding cash during drawdown
 SHARPE_WINDOW = 20
 ```
 
@@ -121,10 +122,29 @@ The environment combines:
 - optional benchmark-relative component against top-3 recent momentum stocks
 - transaction cost penalty
 - turnover penalty
-- drawdown penalty after a 5% drawdown buffer
-- regime penalty for high long-only exposure when drawdown exceeds 10%
+- drawdown penalty after a **3% buffer** (R4: reduced from 5%)
+- regime penalty for high stock exposure when drawdown exceeds **8%** (R4: threshold lowered from 10%, coefficient raised from 0.5 → 1.0)
+- defensive cash bonus when drawdown exceeds 8% and `enable_cash_action=True` (R4: new)
 
 The final reward is clipped to `[-1, 1]`.
+
+### R4 Motivation
+
+Experiment data showed MDD accumulated almost entirely in 2025H1 (bear market), with
+SAC/enabled averaging only 7.38% cash during that period. The original `LAMBDA_DRAWDOWN=0.3`
+let a small daily gain outweigh the drawdown penalty, leaving no strong training signal
+to cut equity exposure. The R4 adjustments make it unprofitable to remain fully invested
+during sustained drawdowns and provide a positive incentive for holding cash defensively.
+
+### Experiment versioning (O1)
+
+Walk-forward metrics include an `env_config` snapshot from `env_config.py`:
+
+- `env_config_version`: human label (currently `r4`); bump when reward/regime changes.
+- `env_config_hash`: 8-char SHA-256 fingerprint of reward + topk knobs.
+
+`experiment_report.py` defaults to **current-env-only** so pre-R4 metrics are not mixed
+into Promotion Gate after R6 retraining.
 
 ## Benchmark Reward
 

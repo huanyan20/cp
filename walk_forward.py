@@ -23,7 +23,7 @@ from research_pipeline import (
     train_and_save_model,
     write_metrics_json,
 )
-from settings import load_settings
+from settings import TIER_PRESETS, load_settings, resolve_tier
 from stock_universe import MACRO_TICKERS_RL, TICKER_NAMES, TICKERS_TECH_EXPANDED
 
 SETTINGS = load_settings()
@@ -37,8 +37,17 @@ __all__ = [
     "cash_modes_from_arg",
     "clamp_periods",
     "parse_seeds",
+    "run_candidate_set",
     "run_research_matrix",
     "run_walk_forward",
+]
+
+# O3 — curated default candidate set. Not a cartesian matrix: only the two best
+# historical performers (SAC enabled #1, PPO disabled close #2) so a routine
+# research iteration trains 2 models x seeds instead of the full 4-combo matrix.
+CANDIDATE_PAIRS: list[tuple[str, bool]] = [
+    ("sac", True),
+    ("ppo", False),
 ]
 
 
@@ -111,6 +120,83 @@ def run_research_matrix(
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = []
             for algo, enable_cash_action, seed in pending_tasks:
+                futures.append(
+                    executor.submit(
+                        _run_single_walk_forward,
+                        timesteps,
+                        algo,
+                        seed,
+                        enable_cash_action,
+                        enable_margin_short,
+                        overnight_feature_path,
+                        temporal_extractor,
+                        overwrite,
+                    )
+                )
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"[Error] Task failed: {e}")
+
+
+def run_candidate_set(
+    timesteps: int = DEFAULT_TIMESTEPS,
+    seeds: list[int] | None = None,
+    enable_margin_short: bool = False,
+    max_workers: int = 1,
+    overwrite: bool = False,
+    overnight_feature_path: str | None = None,
+    temporal_extractor: bool = False,
+    candidate_pairs: list[tuple[str, bool]] | None = None,
+):
+    """O3: train only the curated candidate set (SAC enabled + PPO disabled).
+
+    Explicit (algo, enable_cash_action) pairs rather than a cartesian product,
+    so we avoid retraining the 4-combo matrix on every iteration.
+    """
+    seeds = seeds or DEFAULT_SEEDS
+    candidate_pairs = candidate_pairs or CANDIDATE_PAIRS
+
+    pending: list[tuple[str, bool, int]] = []
+    for algo, enable_cash_action in candidate_pairs:
+        pending.extend(
+            build_pending_walk_forward_tasks(
+                algos=[algo],
+                cash_modes=[enable_cash_action],
+                seeds=seeds,
+                results_dir=RESULTS_DIR,
+                overnight_feature_path=overnight_feature_path,
+                overwrite=overwrite,
+            )
+        )
+
+    if not pending:
+        print("All candidate-set experiments have already been completed. Exiting.")
+        return
+
+    print(
+        f"Candidate set: {[(a, 'enabled' if c else 'disabled') for a, c in candidate_pairs]} "
+        f"x seeds {seeds} -> {len(pending)} task(s)."
+    )
+
+    if max_workers == 1:
+        for algo, enable_cash_action, seed in pending:
+            _run_single_walk_forward(
+                timesteps,
+                algo,
+                seed,
+                enable_cash_action,
+                enable_margin_short,
+                overnight_feature_path,
+                temporal_extractor,
+                overwrite,
+            )
+    else:
+        print(f"Starting multiprocessing with {max_workers} workers for {len(pending)} tasks...")
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+            for algo, enable_cash_action, seed in pending:
                 futures.append(
                     executor.submit(
                         _run_single_walk_forward,
@@ -230,6 +316,7 @@ def _run_single_walk_forward(
         enable_cash_action=enable_cash_action,
         enable_margin_short=enable_margin_short,
         timesteps=timesteps,
+        settings=SETTINGS,
     )
 
     for i, period in enumerate(periods):
@@ -452,14 +539,40 @@ def parse_args():
         default=SETTINGS.research.walk_forward_cash_mode,
     )
     parser.add_argument("--seeds", type=str, default=SETTINGS.research.default_seeds)
-    parser.add_argument("--matrix", action="store_true", help="Run PPO/SAC x cash/no-cash")
+    parser.add_argument(
+        "--tier",
+        choices=sorted(TIER_PRESETS),
+        default=SETTINGS.research.research_tier or None,
+        help=(
+            "O2 layered training tier. Overrides --timesteps and --seeds: "
+            "smoke=30K/1 seed, candidate=150K/2 seeds, promotion=300K/3 seeds."
+        ),
+    )
+    parser.add_argument(
+        "--candidates",
+        action="store_true",
+        help="O3: train only the curated candidate set (SAC enabled + PPO disabled).",
+    )
+    parser.add_argument(
+        "--matrix",
+        action="store_true",
+        help=(
+            "Run the full PPO/SAC x cash/no-cash matrix (opt-in). "
+            "Cost: 4 combos x seeds x 4 periods x timesteps (~18M steps at 300K x 3 seeds). "
+            "Prefer --candidates for routine iterations."
+        ),
+    )
     parser.add_argument("--enable-margin-short", action="store_true")
     parser.add_argument("--workers", type=int, default=1, help="Number of worker processes")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing completed models")
     parser.add_argument(
         "--overnight-feature-path",
-        default=SETTINGS.research.overnight_feature_path,
-        help="Optional overnight_gap_features_1d.csv path for RL observation features.",
+        default=None,
+        help=(
+            "Opt-in overnight_gap_features_1d.csv path for RL observation features. "
+            "Default None keeps base features (with_features is a separate risk-overlay line, "
+            "not the main ranking; see R5/O6)."
+        ),
     )
     parser.add_argument(
         "--temporal-extractor",
@@ -472,20 +585,38 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     seeds = parse_seeds(args.seeds)
-    algos = ["ppo", "sac"] if args.algo == "both" else [args.algo]
-    cash_modes = cash_modes_from_arg(args.cash_mode)
-    if args.matrix:
-        algos = ["ppo", "sac"]
-        cash_modes = [True, False]
+    timesteps = args.timesteps
+    if args.tier:
+        timesteps, seeds = resolve_tier(args.tier, seeds)
+        print(
+            f"[Tier] {args.tier}: timesteps={timesteps:,}, seeds={seeds} "
+            "(overrides --timesteps/--seeds)"
+        )
+    if args.candidates:
+        run_candidate_set(
+            timesteps=timesteps,
+            seeds=seeds,
+            enable_margin_short=args.enable_margin_short,
+            max_workers=args.workers,
+            overwrite=args.overwrite,
+            overnight_feature_path=args.overnight_feature_path,
+            temporal_extractor=args.temporal_extractor,
+        )
+    else:
+        algos = ["ppo", "sac"] if args.algo == "both" else [args.algo]
+        cash_modes = cash_modes_from_arg(args.cash_mode)
+        if args.matrix:
+            algos = ["ppo", "sac"]
+            cash_modes = [True, False]
 
-    run_research_matrix(
-        timesteps=args.timesteps,
-        algos=algos,
-        cash_modes=cash_modes,
-        seeds=seeds,
-        enable_margin_short=args.enable_margin_short,
-        max_workers=args.workers,
-        overwrite=args.overwrite,
-        overnight_feature_path=args.overnight_feature_path,
-        temporal_extractor=args.temporal_extractor,
-    )
+        run_research_matrix(
+            timesteps=timesteps,
+            algos=algos,
+            cash_modes=cash_modes,
+            seeds=seeds,
+            enable_margin_short=args.enable_margin_short,
+            max_workers=args.workers,
+            overwrite=args.overwrite,
+            overnight_feature_path=args.overnight_feature_path,
+            temporal_extractor=args.temporal_extractor,
+        )

@@ -7,10 +7,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import experiment_report
+from env_config import build_env_config_snapshot
 
 
-def metric_payload(seed=42, sortino=1.1):
-    return {
+def metric_payload(seed=42, sortino=1.1, env_tagged=True):
+    payload = {
         "algo": "ppo",
         "seed": seed,
         "cash_mode": "enabled",
@@ -42,6 +43,12 @@ def metric_payload(seed=42, sortino=1.1):
             }
         },
     }
+    if env_tagged:
+        env_config = build_env_config_snapshot()
+        payload["env_config_version"] = env_config["version"]
+        payload["env_config_hash"] = env_config["hash"]
+        payload["env_config"] = env_config
+    return payload
 
 
 class ExperimentReportTests(unittest.TestCase):
@@ -87,6 +94,28 @@ class ExperimentReportTests(unittest.TestCase):
         self.assertEqual(set(summary_df["Variant"]), {"base", "with_features"})
         self.assertEqual({row["variant"] for row in raw_summary}, {"base", "with_features"})
         self.assertEqual(set(period_summary_df["Variant"]), {"base", "with_features"})
+
+    def test_base_variant_outranks_with_features_even_if_lower_sortino(self):
+        # O3: with_features is a risk overlay and must never outrank base, even when
+        # its Sortino is higher.
+        with tempfile.TemporaryDirectory() as tmp:
+            self.write_json(
+                tmp,
+                "metrics_ppo_enabled_wf_seed42.json",
+                metric_payload(seed=42, sortino=1.0),
+            )
+            self.write_json(
+                tmp,
+                "metrics_ppo_enabled_with_features_wf_seed42.json",
+                metric_payload(seed=42, sortino=9.0),
+            )
+
+            records = experiment_report._read_metric_files(tmp)
+            overall_df = experiment_report._overall_dataframe(records)
+            period_df = experiment_report._period_dataframe(records)
+            _, raw_summary, _ = experiment_report._summary_tables(overall_df, period_df)
+
+        self.assertEqual(raw_summary[0]["variant"], "base")
 
     def test_generate_report_includes_promotion_gate_and_optional_summaries(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -152,6 +181,158 @@ class ExperimentReportTests(unittest.TestCase):
         self.assertTrue(summary["baselines"])
         self.assertTrue(summary["ablations"])
         self.assertTrue(summary["stress_tests"])
+
+    def test_filter_excludes_legacy_when_current_tagged_metrics_exist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.write_json(
+                tmp,
+                "metrics_ppo_enabled_wf_seed42.json",
+                metric_payload(seed=42, sortino=2.0, env_tagged=True),
+            )
+            self.write_json(
+                tmp,
+                "metrics_ppo_enabled_wf_seed43.json",
+                metric_payload(seed=43, sortino=1.0, env_tagged=False),
+            )
+
+            records, notes = experiment_report._filter_records_by_env_config(
+                experiment_report._read_metric_files(tmp),
+                current_env_only=True,
+            )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["seed"], 42)
+        self.assertTrue(any("Excluded" in note for note in notes))
+
+    def test_filter_by_env_config_version(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tagged = metric_payload(seed=42, sortino=2.0, env_tagged=True)
+            tagged["algo"] = "sac"
+            tagged["env_config_version"] = "legacy_test"
+            self.write_json(tmp, "metrics_sac_enabled_wf_seed42.json", tagged)
+            self.write_json(
+                tmp,
+                "metrics_ppo_enabled_wf_seed43.json",
+                metric_payload(seed=43, sortino=1.0, env_tagged=True),
+            )
+
+            records, notes = experiment_report._filter_records_by_env_config(
+                experiment_report._read_metric_files(tmp),
+                env_config_version="legacy_test",
+            )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["algo"], "sac")
+        self.assertTrue(any("legacy_test" in note for note in notes))
+
+
+    def test_generate_report_includes_sl_vs_rl_comparison(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tagged = metric_payload(seed=42, sortino=2.0)
+            tagged["algo"] = "sac"
+            self.write_json(tmp, "metrics_sac_enabled_wf_seed42.json", tagged)
+            sl_payload = {
+                "strategy": "sl_rule",
+                "allocator": "rule",
+                "algo": "sl_lightgbm",
+                "horizon": 5,
+                "seed": 42,
+                "cash_mode": "enabled",
+                "overall": {
+                    "sortino": 1.6,
+                    "max_drawdown": 0.10,
+                    "total_return": 0.20,
+                    "avg_cash_weight": 0.15,
+                    "cash_weight_std": 0.05,
+                    "cash_corr_next_return": -0.05,
+                    "turnover": 0.02,
+                    "win_rate": 0.54,
+                },
+                "periods": {
+                    "2024H2": {
+                        "sortino": 1.6,
+                        "max_drawdown": 0.08,
+                        "total_return": 0.07,
+                        "avg_cash_weight": 0.14,
+                        "cash_weight_std": 0.04,
+                        "turnover": 0.02,
+                        "win_rate": 0.55,
+                        "test_start": "2024-07-01",
+                        "test_end": "2024-12-31",
+                    }
+                },
+            }
+            self.write_json(tmp, "metrics_sl_rule_h5_seed42.json", sl_payload)
+            md_path = Path(tmp) / "report.md"
+            json_path = Path(tmp) / "summary.json"
+            experiment_report.generate_report(
+                results_dir=tmp,
+                output_md=str(md_path),
+                output_json=str(json_path),
+            )
+            md_text = md_path.read_text(encoding="utf-8")
+            summary = json.loads(json_path.read_text(encoding="utf-8"))
+
+        self.assertIn("### 8d. SL vs RL Comparison", md_text)
+        self.assertIn("#### Overall Metrics", md_text)
+        self.assertIn("#### Verdict", md_text)
+        comparison = summary.get("sl_vs_rl_comparison")
+        self.assertIsNotNone(comparison)
+        self.assertIn("overall", comparison)
+        self.assertIn("verdict", comparison)
+        self.assertTrue(len(comparison["verdict"]) > 0)
+        sortino_row = next(r for r in comparison["overall"] if r["metric"] == "sortino")
+        self.assertEqual(sortino_row["winner"], "RL")
+
+    def test_generate_report_includes_sl_baseline_section(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sl_payload = {
+                "strategy": "sl_rule",
+                "allocator": "rule",
+                "algo": "sl_lightgbm",
+                "horizon": 5,
+                "seed": 42,
+                "cash_mode": "enabled",
+                "overall": {
+                    "sortino": 1.4,
+                    "max_drawdown": 0.11,
+                    "total_return": 0.18,
+                    "avg_cash_weight": 0.15,
+                    "cash_weight_std": 0.05,
+                    "cash_corr_next_return": -0.05,
+                    "turnover": 0.03,
+                    "win_rate": 0.54,
+                },
+                "periods": {
+                    "2025H1": {
+                        "sortino": 1.4,
+                        "max_drawdown": 0.09,
+                        "total_return": 0.08,
+                        "avg_cash_weight": 0.14,
+                        "cash_weight_std": 0.04,
+                        "turnover": 0.02,
+                        "win_rate": 0.55,
+                        "test_start": "2025-01-01",
+                        "test_end": "2025-06-30",
+                    }
+                },
+            }
+            self.write_json(tmp, "metrics_sl_rule_h5_seed42.json", sl_payload)
+            md_path = Path(tmp) / "report.md"
+            json_path = Path(tmp) / "summary.json"
+            experiment_report.generate_report(
+                results_dir=tmp,
+                output_md=str(md_path),
+                output_json=str(json_path),
+                current_env_only=False,
+            )
+            md_text = md_path.read_text(encoding="utf-8")
+            summary = json.loads(json_path.read_text(encoding="utf-8"))
+
+        self.assertIn("## 8. SL Baseline", md_text)
+        self.assertIn("SL Promotion Gate", md_text)
+        self.assertIn("sl_baseline", summary)
+        self.assertIsNotNone(summary["sl_baseline"]["promotion_gate"])
 
 
 if __name__ == "__main__":

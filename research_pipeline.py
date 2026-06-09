@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from data_loader import fetch_multi_asset_data
+from env_config import build_env_config_snapshot
 from metrics_utils import calculate_metrics
 from trading_env import TaiwanStockEnv
 from train_portfolio import build_model
@@ -131,7 +132,9 @@ def build_seed_metrics(
     enable_cash_action: bool,
     enable_margin_short: bool,
     timesteps: int,
+    settings=None,
 ) -> dict:
+    env_config = build_env_config_snapshot(settings)
     return {
         "algo": algo,
         "seed": seed,
@@ -140,6 +143,9 @@ def build_seed_metrics(
         "enable_margin_short": enable_margin_short,
         "train_test_period": "Walk-Forward",
         "timesteps": timesteps,
+        "env_config_version": env_config["version"],
+        "env_config_hash": env_config["hash"],
+        "env_config": env_config,
         "overall": {},
         "periods": {},
         "skipped_periods": {},
@@ -167,6 +173,8 @@ def build_train_env(
     enable_cash_action: bool = True,
     enable_margin_short: bool = False,
     overnight_feature_path: str | None = None,
+    enable_sl_features: bool = False,
+    sl_scores: dict | None = None,
 ) -> tuple[TaiwanStockEnv, dict]:
     """
     Build training environment from period data.
@@ -181,6 +189,8 @@ def build_train_env(
         enable_cash_action: Enable cash action in env
         enable_margin_short: Enable margin shorting
         overnight_feature_path: Optional overnight features CSV path
+        enable_sl_features: S5 spike — append SL score/rank/rule_weight to observation
+        sl_scores: Per-ticker score Series aligned with train_data (required if enable_sl_features)
     
     Returns:
         Tuple of (TaiwanStockEnv, dict with training data)
@@ -194,6 +204,14 @@ def build_train_env(
         overnight_feature_path=overnight_feature_path,
     )
     
+    sl_feature_arrays = None
+    if enable_sl_features:
+        if not sl_scores:
+            raise ValueError("enable_sl_features requires sl_scores.")
+        from sl_pipeline.sl_features import build_sl_feature_arrays
+
+        sl_feature_arrays = build_sl_feature_arrays(train_data, sl_scores, tickers)
+
     train_env = TaiwanStockEnv(
         df_dict=train_data,
         window_size=window_size,
@@ -203,8 +221,10 @@ def build_train_env(
         enable_cash_action=enable_cash_action,
         enable_margin_short=enable_margin_short,
         max_leverage=settings.risk_limits.max_leverage,
+        enable_sl_features=enable_sl_features,
+        sl_features_by_ticker=sl_feature_arrays,
     )
-    
+
     return train_env, train_data
 
 

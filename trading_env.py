@@ -11,10 +11,14 @@ TAX_RATE_SELL = 0.003
 SLIPPAGE_RATE = 0.001
 BORROW_RATE_DAILY = 0.015 / 252
 
-LAMBDA_COST = 5.0      # Increased from 0.5 to strongly penalize friction
-LAMBDA_TURNOVER = 1.0  # New penalty for portfolio churn
+LAMBDA_COST = 5.0           # Strongly penalize transaction friction
+LAMBDA_TURNOVER = 1.0       # Penalize portfolio churn
 LAMBDA_CASH = 0.0
-LAMBDA_DRAWDOWN = 0.3
+LAMBDA_DRAWDOWN = 0.8       # R4: 0.3 → 0.8 to force active drawdown management
+LAMBDA_CASH_DEFENSIVE = 0.2 # R4: bonus for holding cash during drawdown periods
+REWARD_REF_DD = 0.03        # drawdown penalty buffer (R4: 5% → 3%)
+REGIME_DD_THRESHOLD = 0.08  # regime penalty starts above this drawdown (R4: 10% → 8%)
+REGIME_PENALTY_COEF = 1.0   # stock exposure penalty during drawdown (R4: 0.5 → 1.0)
 SHARPE_WINDOW = 20
 _BENCHMARK_TOPK = 3
 _BENCHMARK_LOOKBACK = 20
@@ -46,6 +50,8 @@ class TaiwanStockEnv(gym.Env):
         enable_margin_short: bool = False,
         max_leverage: float = 2.0,
         record_trades: bool = False,
+        enable_sl_features: bool = False,
+        sl_features_by_ticker: dict | None = None,
     ):
         super().__init__()
 
@@ -69,13 +75,20 @@ class TaiwanStockEnv(gym.Env):
         self.initial_balance = initial_balance
 
         self._NUM_ACCOUNT_FEATURES = 6
+        self.enable_sl_features = bool(enable_sl_features)
+        self._sl_features_by_ticker = sl_features_by_ticker or {}
+        self._NUM_SL_FEATURES = 3 if self.enable_sl_features else 0
+        if self.enable_sl_features and not self._sl_features_by_ticker:
+            raise ValueError("enable_sl_features=True requires sl_features_by_ticker.")
         action_dim = self.num_stocks + 1 if self.enable_cash_action else self.num_stocks
         self.action_space = spaces.Box(
             low=-5.0, high=5.0, shape=(action_dim,), dtype=np.float32
         )
 
         self._obs_dim_per_stock = (
-            window_size * self.num_market_features + self._NUM_ACCOUNT_FEATURES
+            window_size * self.num_market_features
+            + self._NUM_ACCOUNT_FEATURES
+            + self._NUM_SL_FEATURES
         )
         self.observation_space = spaces.Box(
             low=-np.inf,
@@ -356,19 +369,33 @@ class TaiwanStockEnv(gym.Env):
         )
         cash_p = LAMBDA_CASH * cash_ratio
 
-        reward_ref_dd = 0.05
         raw_dd = (self._peak_value - self._portfolio_value) / max(
             self._peak_value, 1e-8
         )
-        drawdown_p = LAMBDA_DRAWDOWN * max(0.0, raw_dd - reward_ref_dd)
+        drawdown_p = LAMBDA_DRAWDOWN * max(0.0, raw_dd - REWARD_REF_DD)
 
-        # Dynamic Regime Penalty: If drawdown is severe, penalize high stock exposure
         regime_penalty = 0.0
-        if raw_dd > 0.10 and not self.enable_margin_short:
+        if raw_dd > REGIME_DD_THRESHOLD and not self.enable_margin_short:
             stock_exposure = np.sum(np.abs(self._positions))
-            regime_penalty = 0.5 * stock_exposure * (raw_dd - 0.10) # Linearly penalize exposure during drawdown
+            regime_penalty = (
+                REGIME_PENALTY_COEF
+                * stock_exposure
+                * (raw_dd - REGIME_DD_THRESHOLD)
+            )
 
-        return float(np.clip(hybrid_reward - cost_p - turnover_p - cash_p - drawdown_p - regime_penalty, -1.0, 1.0))
+        cash_defensive_bonus = 0.0
+        if raw_dd > REGIME_DD_THRESHOLD and self.enable_cash_action:
+            cash_defensive_bonus = (
+                LAMBDA_CASH_DEFENSIVE
+                * cash_ratio
+                * (raw_dd - REGIME_DD_THRESHOLD)
+            )
+
+        return float(np.clip(
+            hybrid_reward - cost_p - turnover_p - cash_p
+            - drawdown_p - regime_penalty + cash_defensive_bonus,
+            -1.0, 1.0,
+        ))
 
     def _get_observation(self) -> np.ndarray:
         obs = np.zeros((self.num_stocks, self._obs_dim_per_stock), dtype=np.float32)
@@ -398,8 +425,36 @@ class TaiwanStockEnv(gym.Env):
                 ],
                 dtype=np.float32,
             )
-            obs[i] = np.concatenate([market_window.astype(np.float32), account])
+            parts = [market_window.astype(np.float32), account]
+            if self.enable_sl_features:
+                sl_row = self._sl_features_by_ticker.get(ticker)
+                if sl_row is not None and self._current_step < len(sl_row):
+                    parts.append(sl_row[self._current_step].astype(np.float32))
+                else:
+                    parts.append(np.zeros(self._NUM_SL_FEATURES, dtype=np.float32))
+            obs[i] = np.concatenate(parts)
         return obs
+
+    def portfolio_state_snapshot(self):
+        """PortfolioState-compatible dict for SL allocators (S5)."""
+        from sl_pipeline.allocator import PortfolioState
+
+        stock_exposure = float(np.sum(np.abs(self._positions)))
+        if self.enable_margin_short or self.enable_cash_action:
+            cash_weight = float(self._cash_weight)
+        else:
+            cash_weight = max(0.0, 1.0 - stock_exposure)
+        return PortfolioState(
+            positions={
+                self.tickers[i]: float(self._positions[i])
+                for i in range(self.num_stocks)
+                if abs(self._positions[i]) > 1e-6
+            },
+            cash_weight=cash_weight,
+            portfolio_value=float(self._portfolio_value),
+            peak_value=float(self._peak_value),
+            rolling_mdd=float(self._max_drawdown),
+        )
 
     def _get_info(self) -> dict:
         stock_exposure = float(np.sum(np.abs(self._positions)))

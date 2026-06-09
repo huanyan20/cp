@@ -4,7 +4,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 
 MODEL_FILES = [
     "wf_ppo_model_2024H2.zip",

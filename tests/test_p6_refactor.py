@@ -82,18 +82,25 @@ class CMoneyClientTests(unittest.TestCase):
 
     def test_cmoney_client_importable_independently(self):
         """cmoney_client can be imported without importing cmoney_rpa."""
-        # Remove cmoney_rpa from sys.modules to ensure independence
-        saved = sys.modules.pop("cmoney_rpa", None)
-        try:
-            import importlib
+        import importlib
 
-            import cmoney_client
-            importlib.reload(cmoney_client)
-            self.assertTrue(callable(cmoney_client.get_accounts_config))
-            self.assertTrue(callable(cmoney_client.get_auto_aids))
+        # Pop both so we can import a throwaway fresh cmoney_client without
+        # mutating the shared module (an in-place reload would replace its
+        # functions and break `is` identity checks in sibling tests).
+        saved_rpa = sys.modules.pop("cmoney_rpa", None)
+        saved_client = sys.modules.pop("cmoney_client", None)
+        try:
+            fresh_client = importlib.import_module("cmoney_client")
+            self.assertTrue(callable(fresh_client.get_accounts_config))
+            self.assertTrue(callable(fresh_client.get_auto_aids))
         finally:
-            if saved is not None:
-                sys.modules["cmoney_rpa"] = saved
+            # Restore the original module objects untouched.
+            if saved_client is not None:
+                sys.modules["cmoney_client"] = saved_client
+            else:
+                sys.modules.pop("cmoney_client", None)
+            if saved_rpa is not None:
+                sys.modules["cmoney_rpa"] = saved_rpa
 
 
 # ---------------------------------------------------------------------------
