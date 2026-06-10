@@ -128,7 +128,7 @@ def build_period_comparison(
         rl_sub = rl_df[rl_df["period"] == period]
         sl_sub = sl_df[sl_df["period"] == period]
         entry: dict[str, Any] = {"period": period}
-        for key, label, kind, direction in COMPARE_METRICS[:4]:
+        for key, _label, _kind, direction in COMPARE_METRICS[:4]:
             rl_val = float(rl_sub[key].mean())
             sl_val = float(sl_sub[key].mean())
             entry[f"rl_{key}"] = rl_val

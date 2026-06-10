@@ -7,10 +7,12 @@ from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.utils import set_random_seed
 
 from data_loader import fetch_multi_asset_data
+from settings import load_settings, resolve_torch_device
 from stock_universe import MACRO_TICKERS_RL, TICKERS_TECH_EXPANDED
 from trading_env import TaiwanStockEnv
 from train_portfolio import build_policy_kwargs
 
+SETTINGS = load_settings()
 WINDOW_SIZE = 20
 TRAIN_START = "2020-01-01"
 TRAIN_END = "2023-12-31"
@@ -57,6 +59,7 @@ def optimize_ppo(trial: optuna.Trial):
     )
 
     # 3. Build model
+    device = resolve_torch_device(SETTINGS.research.torch_device)
     model = PPO(
         "MlpPolicy",
         train_env,
@@ -69,6 +72,7 @@ def optimize_ppo(trial: optuna.Trial):
         clip_range=clip_range,
         ent_coef=ent_coef,
         policy_kwargs=policy_kwargs,
+        device=device,
         verbose=0,
     )
 

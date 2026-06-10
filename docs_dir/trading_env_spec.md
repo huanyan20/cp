@@ -1,6 +1,6 @@
 # TaiwanStockEnv Specification
 
-Updated: 2026-06-08 (R4 reward tuning + O1 env_config versioning)
+Updated: 2026-06-10 (P7 NumPy internals + SL feature inputs documented)
 
 `TaiwanStockEnv` is a Gymnasium environment for Taiwan stock portfolio allocation
 experiments. It supports long-only allocation, optional cash allocation, and an
@@ -20,18 +20,31 @@ TaiwanStockEnv(
     enable_margin_short=False,
     max_leverage=2.0,
     record_trades=False,
+    enable_sl_features=False,
+    sl_features_by_ticker=None,   # required when enable_sl_features=True
 )
 ```
 
 Each DataFrame in `df_dict` must be aligned by row and include `log_return`.
 The loader used by training and evaluation is `data_loader.fetch_multi_asset_data()`.
 
+`sl_features_by_ticker` maps ticker → `(n_steps, 3)` array built by
+`sl_pipeline.sl_features.build_sl_feature_arrays()`. Missing tickers or steps
+beyond an array's length read as zeros.
+
+Internals (P7, 2026-06-10): all per-step reads go through NumPy arrays
+pre-stacked in `__init__` (`[T, N, F]` market data, `[T, N]` log returns,
+`[T, N, 3]` SL features). Observations and rewards are bit-identical to the
+previous per-step Pandas implementation (guarded by
+`tests/test_env_numpy_equivalence.py`); env stepping is ~25x faster.
+
 ## Observation
 
 Observation shape:
 
 ```text
-(num_stocks, window_size * num_market_features + 6)
+(num_stocks, window_size * num_market_features + 6)        # default
+(num_stocks, window_size * num_market_features + 6 + 3)    # enable_sl_features=True
 ```
 
 The six account features appended per stock are:

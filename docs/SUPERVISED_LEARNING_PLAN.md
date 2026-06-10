@@ -10,7 +10,7 @@
 
 | 痛點（RL 現況） | SL 可補之處 |
 |----------------|-------------|
-| 訓練極慢（GPU ~19 fps，單期 150K 數小時） | LightGBM 幾分鐘可訓、快速迭代 |
+| 訓練慢（GTX 1060 約 36–52 fps，單期 300K 約 2 小時；P7 後瓶頸在 GPU 更新非 env） | LightGBM 幾分鐘可訓、快速迭代 |
 | MDD Gate 卡關（worst-case 38.71% > 35%） | Vol-target + 階梯斷路器**顯式**控回撤 |
 | Reward 與 Gate 目標錯位、POMDP | 直接優化可解釋的截面 alpha 標籤 |
 | overnight features ablation 傷 Sortino | SL 打分與 RL 配置解耦，宏觀走 risk overlay（O6） |

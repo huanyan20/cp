@@ -23,7 +23,12 @@ from research_pipeline import (
     train_and_save_model,
     write_metrics_json,
 )
-from settings import TIER_PRESETS, load_settings, resolve_tier
+from settings import (
+    TIER_PRESETS,
+    load_settings,
+    resolve_tier,
+    resolve_torch_device,
+)
 from stock_universe import MACRO_TICKERS_RL, TICKER_NAMES, TICKERS_TECH_EXPANDED
 
 SETTINGS = load_settings()
@@ -388,7 +393,8 @@ def _run_single_walk_forward(
         from stable_baselines3 import PPO, SAC
         
         model_class = PPO if algo == "ppo" else SAC
-        model = model_class.load(model_path, env=test_env)
+        device = resolve_torch_device(SETTINGS.research.torch_device)
+        model = model_class.load(model_path, env=test_env, device=device)
 
         # Run evaluation loop
         eval_results = run_eval_loop(
@@ -544,8 +550,9 @@ def parse_args():
         choices=sorted(TIER_PRESETS),
         default=SETTINGS.research.research_tier or None,
         help=(
-            "O2 layered training tier. Overrides --timesteps and --seeds: "
-            "smoke=30K/1 seed, candidate=150K/2 seeds, promotion=300K/3 seeds."
+            "O2 layered training tier. Overrides --timesteps and --seeds. "
+            "All tiers train 300K timesteps; they differ by seed count: "
+            "smoke=1 seed, candidate=2 seeds, promotion=3 seeds."
         ),
     )
     parser.add_argument(

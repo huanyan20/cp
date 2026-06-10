@@ -10,13 +10,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from data_pipeline import BASE_FEATURE_COLS, CROSS_ASSET_COLS, build_feature_schema
-from sl_pipeline.labels import (
-    build_cross_demean_frame,
-    build_labeled_panel,
-    forward_log_return_t1,
-    label_column_name,
-    split_panel_by_date,
-)
+from env_config import build_env_config_snapshot
+from promotion_gate import run_promotion_gate
 from sl_pipeline.allocator import MarketContext, PortfolioState
 from sl_pipeline.backtest import (
     build_trading_calendar,
@@ -25,24 +20,32 @@ from sl_pipeline.backtest import (
     simulate_period,
     trade_cost_rate,
 )
-from env_config import build_env_config_snapshot
 from sl_pipeline.comparison import build_sl_vs_rl_comparison
+from sl_pipeline.gate import (
+    build_sl_raw_summary,
+    read_sl_metric_files,
+    run_sl_promotion_gate,
+)
+from sl_pipeline.labels import (
+    build_cross_demean_frame,
+    build_labeled_panel,
+    forward_log_return_t1,
+    label_column_name,
+    split_panel_by_date,
+)
 from sl_pipeline.rl_allocator import RLAllocator, RLAllocatorConfig
 from sl_pipeline.rl_spike import validate_spike
+from sl_pipeline.rule_based_allocator import (
+    RuleBasedAllocator,
+    RuleBasedAllocatorConfig,
+)
+from sl_pipeline.signal_generator import SignalGenerator, SignalGeneratorConfig
 from sl_pipeline.sl_features import (
     SL_FEATURES_PER_STOCK,
     build_sl_feature_arrays,
     cross_sectional_rank_norm,
     cross_sectional_zscore,
 )
-from sl_pipeline.gate import (
-    build_sl_raw_summary,
-    read_sl_metric_files,
-    run_sl_promotion_gate,
-)
-from promotion_gate import run_promotion_gate
-from sl_pipeline.rule_based_allocator import RuleBasedAllocator, RuleBasedAllocatorConfig
-from sl_pipeline.signal_generator import SignalGenerator, SignalGeneratorConfig
 
 
 def make_enriched_frame(days: int = 40, log_slope: float = 0.01) -> pd.DataFrame:

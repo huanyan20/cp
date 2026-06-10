@@ -80,11 +80,13 @@ python experiment_report.py --include-all-env-configs # 全世代（不建議用
 ```text
 改 reward / env（bump ENV_CONFIG_VERSION）
   ↓
-smoke（30K/1）            ── 不過則回頭改參數
+smoke（300K/1 seed）      ── 不過則回頭改參數
   ↓ 方向正確
-candidate（150K/2）       ── 趨勢錯則放棄此方向
+candidate（300K/2 seeds） ── 趨勢錯則放棄此方向
   ↓ MDD 改善趨勢
-promotion（300K/3，最佳候選 + 對照）
+promotion（300K/3 seeds，最佳候選 + 對照）
+
+（已拍板：timesteps 全 tier 統一 300K，tier 僅差 seed 數）
   ↓
 python experiment_report.py   （自動只讀當前 env）
   ↓

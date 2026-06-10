@@ -12,7 +12,10 @@ from sl_pipeline.allocator import (
     PortfolioState,
     TargetPortfolio,
 )
-from sl_pipeline.rule_based_allocator import RuleBasedAllocator, RuleBasedAllocatorConfig
+from sl_pipeline.rule_based_allocator import (
+    RuleBasedAllocator,
+    RuleBasedAllocatorConfig,
+)
 
 
 def _softmax(logits: np.ndarray, temperature: float = 0.5) -> np.ndarray:

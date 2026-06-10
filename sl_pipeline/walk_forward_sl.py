@@ -21,7 +21,10 @@ from sl_pipeline.backtest import (
     sl_metrics_path,
 )
 from sl_pipeline.gate import run_sl_promotion_gate, save_sl_gate_result
-from sl_pipeline.rule_based_allocator import RuleBasedAllocator, RuleBasedAllocatorConfig
+from sl_pipeline.rule_based_allocator import (
+    RuleBasedAllocator,
+    RuleBasedAllocatorConfig,
+)
 from sl_pipeline.signal_generator import SignalGenerator, SignalGeneratorConfig
 from stock_universe import MACRO_TICKERS_RL, TICKERS_TECH_EXPANDED
 

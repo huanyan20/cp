@@ -10,7 +10,11 @@ import numpy as np
 import pandas as pd
 
 from sl_pipeline.rl_allocator import RLAllocator, RLAllocatorConfig
-from sl_pipeline.sl_features import SL_FEATURE_VERSION, SL_FEATURES_PER_STOCK, build_sl_feature_arrays
+from sl_pipeline.sl_features import (
+    SL_FEATURE_VERSION,
+    SL_FEATURES_PER_STOCK,
+    build_sl_feature_arrays,
+)
 from trading_env import TaiwanStockEnv
 
 

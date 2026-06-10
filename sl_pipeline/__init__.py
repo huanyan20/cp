@@ -13,8 +13,6 @@ from sl_pipeline.backtest import (
     simulate_period,
 )
 from sl_pipeline.comparison import build_sl_vs_rl_comparison
-from sl_pipeline.rl_allocator import RLAllocator, RLAllocatorConfig
-from sl_pipeline.sl_features import SL_FEATURE_VERSION, SL_FEATURES_PER_STOCK, build_sl_feature_arrays
 from sl_pipeline.gate import (
     build_sl_raw_summary,
     read_sl_metric_files,
@@ -27,8 +25,17 @@ from sl_pipeline.labels import (
     forward_log_return_t1,
     label_column_name,
 )
-from sl_pipeline.rule_based_allocator import RuleBasedAllocator, RuleBasedAllocatorConfig
+from sl_pipeline.rl_allocator import RLAllocator, RLAllocatorConfig
+from sl_pipeline.rule_based_allocator import (
+    RuleBasedAllocator,
+    RuleBasedAllocatorConfig,
+)
 from sl_pipeline.signal_generator import SignalGenerator, SignalGeneratorConfig
+from sl_pipeline.sl_features import (
+    SL_FEATURE_VERSION,
+    SL_FEATURES_PER_STOCK,
+    build_sl_feature_arrays,
+)
 
 __all__ = [
     "BacktestConfig",

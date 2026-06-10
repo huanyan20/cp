@@ -78,5 +78,24 @@ class TrainingTierTests(unittest.TestCase):
             settings.resolve_tier("turbo", [42])
 
 
+class TorchDeviceTests(unittest.TestCase):
+    def test_resolve_torch_device_auto_prefers_cuda_when_available(self):
+        import torch
+
+        expected = "cuda" if torch.cuda.is_available() else "cpu"
+        self.assertEqual(settings.resolve_torch_device("auto"), expected)
+
+    def test_resolve_torch_device_cpu(self):
+        self.assertEqual(settings.resolve_torch_device("cpu"), "cpu")
+
+    def test_resolve_torch_device_rejects_unknown_value(self):
+        with self.assertRaises(ValueError):
+            settings.resolve_torch_device("tpu")
+
+    def test_research_torch_device_defaults_to_auto(self):
+        app_settings = settings.load_settings()
+        self.assertEqual(app_settings.research.torch_device, "auto")
+
+
 if __name__ == "__main__":
     unittest.main()

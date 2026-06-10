@@ -74,12 +74,41 @@ class TaiwanStockEnv(gym.Env):
         self.window_size = window_size
         self.initial_balance = initial_balance
 
+        # Pandas .iloc indexing inside step()/_get_observation() dominated env
+        # runtime, so all per-step reads go through pre-stacked NumPy arrays.
+        # self.dfs is kept only for external consumers and trade recording.
+        # Shape: [max_steps, num_stocks, num_market_features]
+        self._market_data = np.stack(
+            [self.dfs[t].to_numpy(dtype=np.float32) for t in self.tickers], axis=1
+        )
+        # float64 to keep reward math identical to the old per-cell reads.
+        # Shape: [max_steps, num_stocks]
+        self._log_returns = np.stack(
+            [self.dfs[t]["log_return"].to_numpy(dtype=np.float64) for t in self.tickers],
+            axis=1,
+        )
+
         self._NUM_ACCOUNT_FEATURES = 6
         self.enable_sl_features = bool(enable_sl_features)
         self._sl_features_by_ticker = sl_features_by_ticker or {}
         self._NUM_SL_FEATURES = 3 if self.enable_sl_features else 0
         if self.enable_sl_features and not self._sl_features_by_ticker:
             raise ValueError("enable_sl_features=True requires sl_features_by_ticker.")
+        # Pre-stacked SL features [max_steps, num_stocks, 3]; missing tickers
+        # or steps beyond an array's length stay zero (same as the old lookup).
+        self._sl_data = None
+        if self.enable_sl_features:
+            self._sl_data = np.zeros(
+                (self.max_steps, self.num_stocks, self._NUM_SL_FEATURES),
+                dtype=np.float32,
+            )
+            for i, ticker in enumerate(self.tickers):
+                sl_row = self._sl_features_by_ticker.get(ticker)
+                if sl_row is None:
+                    continue
+                sl_arr = np.asarray(sl_row, dtype=np.float32)
+                n = min(len(sl_arr), self.max_steps)
+                self._sl_data[:n, i, :] = sl_arr[:n]
         action_dim = self.num_stocks + 1 if self.enable_cash_action else self.num_stocks
         self.action_space = spaces.Box(
             low=-5.0, high=5.0, shape=(action_dim,), dtype=np.float32
@@ -110,26 +139,18 @@ class TaiwanStockEnv(gym.Env):
 
         benchmark_top3_idx = None
         if self.use_benchmark_reward and self._current_step >= _BENCHMARK_LOOKBACK:
-            bm_scores = np.array(
-                [
-                    self.dfs[t]["log_return"]
-                    .iloc[self._current_step - _BENCHMARK_LOOKBACK : self._current_step]
-                    .sum()
-                    for t in self.tickers
-                ]
-            )
+            bm_scores = self._log_returns[
+                self._current_step - _BENCHMARK_LOOKBACK : self._current_step
+            ].sum(axis=0)
             benchmark_top3_idx = np.argsort(bm_scores)[-_BENCHMARK_TOPK:]
 
         self._current_step += 1
         terminated = self._current_step >= self.max_steps - 1
 
-        log_returns = np.array(
-            [
-                self.dfs[t].iloc[self._current_step]["log_return"]
-                if not terminated
-                else 0.0
-                for t in self.tickers
-            ]
+        log_returns = (
+            np.zeros(self.num_stocks)
+            if terminated
+            else self._log_returns[self._current_step]
         )
 
         self._benchmark_log_r = (
@@ -398,41 +419,39 @@ class TaiwanStockEnv(gym.Env):
         ))
 
     def _get_observation(self) -> np.ndarray:
-        obs = np.zeros((self.num_stocks, self._obs_dim_per_stock), dtype=np.float32)
         start = self._current_step - self.window_size
         stock_exposure = float(np.sum(np.abs(self._positions)))
         if self.enable_margin_short or self.enable_cash_action:
             cash_ratio = float(self._cash_weight)
         else:
             cash_ratio = max(0.0, 1.0 - stock_exposure)
-            
+
         total_ret = (self._portfolio_value - self.initial_balance) / max(
             self.initial_balance, 1e-8
         )
         dd_norm = float(np.clip(self._max_drawdown, 0.0, 1.0))
-        for i, ticker in enumerate(self.tickers):
-            market_window = (
-                self.dfs[ticker].iloc[start : self._current_step].values.flatten()
-            )
-            account = np.array(
-                [
-                    cash_ratio,
-                    float(np.clip(total_ret, -1.0, 1.0)),
-                    dd_norm,
-                    float(self._positions[i]),
-                    float(np.clip(self._trade_returns[i], -1.0, 1.0)),
-                    float(np.clip(self._holding_periods[i] / 100.0, 0.0, 1.0)),
-                ],
-                dtype=np.float32,
-            )
-            parts = [market_window.astype(np.float32), account]
-            if self.enable_sl_features:
-                sl_row = self._sl_features_by_ticker.get(ticker)
-                if sl_row is not None and self._current_step < len(sl_row):
-                    parts.append(sl_row[self._current_step].astype(np.float32))
-                else:
-                    parts.append(np.zeros(self._NUM_SL_FEATURES, dtype=np.float32))
-            obs[i] = np.concatenate(parts)
+
+        obs = np.empty((self.num_stocks, self._obs_dim_per_stock), dtype=np.float32)
+        market_dim = self.window_size * self.num_market_features
+        # [window, num_stocks, F] -> [num_stocks, window * F]
+        obs[:, :market_dim] = (
+            self._market_data[start : self._current_step]
+            .transpose(1, 0, 2)
+            .reshape(self.num_stocks, market_dim)
+        )
+
+        account = obs[:, market_dim : market_dim + self._NUM_ACCOUNT_FEATURES]
+        account[:, 0] = cash_ratio
+        account[:, 1] = np.clip(total_ret, -1.0, 1.0)
+        account[:, 2] = dd_norm
+        account[:, 3] = self._positions
+        account[:, 4] = np.clip(self._trade_returns, -1.0, 1.0)
+        account[:, 5] = np.clip(self._holding_periods / 100.0, 0.0, 1.0)
+
+        if self.enable_sl_features:
+            obs[:, market_dim + self._NUM_ACCOUNT_FEATURES :] = self._sl_data[
+                self._current_step
+            ]
         return obs
 
     def portfolio_state_snapshot(self):

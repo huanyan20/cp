@@ -18,7 +18,7 @@ from stable_baselines3 import PPO, SAC
 
 from data_loader import fetch_multi_asset_data
 from metrics_utils import calculate_metrics
-from settings import load_settings
+from settings import describe_torch_device, load_settings, resolve_torch_device
 from stock_universe import MACRO_TICKERS_RL, TICKER_NAMES, TICKERS_TECH_EXPANDED
 from trading_env import TaiwanStockEnv
 
@@ -62,10 +62,12 @@ def run_eval(
     )
 
     print(f"\n=== 載入模型：{model_path} ===")
+    device = resolve_torch_device(SETTINGS.research.torch_device)
+    print(f"[Device] {describe_torch_device(device)}")
     if "sac" in model_name_lower:
-        model = SAC.load(model_path)
+        model = SAC.load(model_path, device=device)
     else:
-        model = PPO.load(model_path)
+        model = PPO.load(model_path, device=device)
 
     expected_shape = tuple(model.observation_space.shape)
     actual_shape = tuple(env.observation_space.shape)

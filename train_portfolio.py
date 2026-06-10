@@ -1,12 +1,10 @@
 """Train portfolio RL agents with PPO or SAC."""
 
 import argparse
+import os
 import time
-import warnings
 
 import numpy as np
-
-warnings.filterwarnings("ignore", message="You are trying to run PPO on the GPU")
 
 try:
     import winsound
@@ -19,7 +17,11 @@ from stable_baselines3.common.utils import set_random_seed  # noqa: E402
 
 from data_loader import fetch_multi_asset_data  # noqa: E402
 from gnn_extractor import GnnFeatureExtractor, TemporalGnnFeatureExtractor  # noqa: E402
-from settings import load_settings  # noqa: E402
+from settings import (  # noqa: E402
+    describe_torch_device,
+    load_settings,
+    resolve_torch_device,
+)
 from stock_universe import MACRO_TICKERS_RL, TICKERS_TECH_EXPANDED  # noqa: E402
 from trading_env import TaiwanStockEnv  # noqa: E402
 
@@ -86,7 +88,14 @@ def build_model(
     env: TaiwanStockEnv,
     timesteps: int,
     temporal_extractor: bool = False,
+    device: str | None = None,
 ):
+    if device is None:
+        device = resolve_torch_device(SETTINGS.research.torch_device)
+    else:
+        device = resolve_torch_device(device)
+    print(f"[Device] {describe_torch_device(device)}")
+
     policy_kwargs = build_policy_kwargs(temporal_extractor=temporal_extractor)
 
     if algo == "ppo":
@@ -94,6 +103,7 @@ def build_model(
             "MlpPolicy",
             env,
             verbose=1,
+            device=device,
             learning_rate=3e-5,
             n_steps=256,
             batch_size=64,
@@ -115,21 +125,25 @@ def build_model(
 
     if algo == "sac":
         # 自動調整 buffer_size，避免 OOM (Out of Memory)
-        # 1. 預設最大限制：不要超過系統 2GB 的記憶體 (避免 Windows 分配大連續記憶體失敗)
-        # 每個 transition 包含 obs 與 next_obs，皆為 float32 (4 bytes)
+        # optimize_memory_usage=True 時 SB3 的 obs 與 next_obs 共用同一個陣列，
+        # 每筆 transition 實際只佔一份 float32 obs（舊版公式 *2 多估了一倍）。
+        # 預設上限 4GB（16GB RAM 機器，約 11K transitions ≈ 10 個 episode）。
+        # SAC_BUFFER_RAM_GB 可覆寫：R6 續跑用 1（重現舊公式的 2,805，保 seed 一致）。
+        ram_gb = float(os.environ.get("SAC_BUFFER_RAM_GB", "4"))
         obs_size = np.prod(env.observation_space.shape)
-        bytes_per_transition = obs_size * 4 * 2
-        max_buffer_by_ram = int((2 * 1024**3) / bytes_per_transition)
-        
-        # 2. 也不要超過訓練的總 timesteps
+        bytes_per_transition = obs_size * 4
+        max_buffer_by_ram = int((ram_gb * 1024**3) / bytes_per_transition)
+
+        # 也不要超過訓練的總 timesteps
         buffer_size = min(timesteps, max_buffer_by_ram)
-        
+
         print(f"[SAC] 自動調整 buffer_size = {buffer_size:,} (預估佔用記憶體: {buffer_size * bytes_per_transition / 1024**3:.1f} GB)")
 
         model = SAC(
             "MlpPolicy",
             env,
             verbose=1,
+            device=device,
             learning_rate=3e-4,
             buffer_size=buffer_size,
             learning_starts=1_000,

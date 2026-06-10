@@ -43,6 +43,38 @@ def _env_optional_str(name: str, default: str | None) -> str | None:
     return value or None
 
 
+def resolve_torch_device(requested: str | None = None) -> str:
+    """Map RESEARCH_DEVICE (auto|cuda|cpu) to an SB3/PyTorch device string."""
+    choice = (requested or _env_str("RESEARCH_DEVICE", "auto")).strip().lower()
+    if choice in {"gpu", "cuda"}:
+        import torch
+
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "RESEARCH_DEVICE=cuda but CUDA is unavailable. "
+                "Install a CUDA PyTorch wheel, e.g. "
+                "pip install torch --index-url https://download.pytorch.org/whl/cu124"
+            )
+        return "cuda"
+    if choice == "cpu":
+        return "cpu"
+    if choice == "auto":
+        import torch
+
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    raise ValueError(
+        f"Unknown RESEARCH_DEVICE: {choice!r}. Expected one of auto, cuda, cpu."
+    )
+
+
+def describe_torch_device(device: str) -> str:
+    if device != "cuda":
+        return device
+    import torch
+
+    return f"cuda ({torch.cuda.get_device_name(0)})"
+
+
 # O2 — layered training protocol. Tiers differ by seed count; timesteps fixed at 300K.
 TIER_PRESETS: dict[str, dict[str, int]] = {
     "smoke": {"timesteps": 300_000, "seeds": 1},
@@ -111,6 +143,8 @@ class ResearchSettings:
     env_config_version: str | None = field(
         default_factory=lambda: _env_optional_str("RESEARCH_ENV_CONFIG_VERSION", None)
     )
+    # auto: use CUDA when available; cuda: require GPU; cpu: force CPU
+    torch_device: str = field(default_factory=lambda: _env_str("RESEARCH_DEVICE", "auto"))
 
 
 @dataclass(frozen=True)
