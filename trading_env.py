@@ -6,6 +6,16 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
+try:
+    from trading_env_kernels import (
+        execute_trades_kernel,
+        update_portfolio_kernel,
+        compute_reward_kernel,
+    )
+    _NUMBA_AVAILABLE = True
+except Exception:  # pragma: no cover
+    _NUMBA_AVAILABLE = False
+
 COMMISSION_RATE = 0.001425
 TAX_RATE_SELL = 0.003
 SLIPPAGE_RATE = 0.001
@@ -299,6 +309,23 @@ class TaiwanStockEnv(gym.Env):
         return stock_weights.astype(np.float32)
 
     def _execute_trades(self, target_positions: np.ndarray) -> float:
+        if _NUMBA_AVAILABLE:
+            cost_ratio, new_pv, turnover, new_pos, new_tr = execute_trades_kernel(
+                target_positions.astype(np.float32),
+                self._positions,
+                self._trade_returns,
+                self._portfolio_value,
+                COMMISSION_RATE,
+                TAX_RATE_SELL,
+                SLIPPAGE_RATE,
+            )
+            self._last_turnover = float(turnover)
+            self._positions = new_pos
+            self._trade_returns = new_tr
+            self._portfolio_value = float(new_pv)
+            return float(cost_ratio)
+
+        # Fallback pure-Python path (record_trades mode or Numba unavailable)
         self._last_turnover = float(np.sum(np.abs(target_positions - self._positions)))
         total_cost = 0.0
         for i in range(self.num_stocks):
@@ -311,7 +338,6 @@ class TaiwanStockEnv(gym.Env):
             if target < current:
                 cost += trade_amount * TAX_RATE_SELL
             total_cost += cost
-            
             if self.record_trades:
                 date = str(self.dfs[self.tickers[i]].index[self._current_step])[:10]
                 self.trades_history.append({
@@ -325,7 +351,6 @@ class TaiwanStockEnv(gym.Env):
                     "holding_period_days": float(self._holding_periods[i]) if target < current else 0.0,
                     "trade_type": "BUY" if target > current else "SELL"
                 })
-
             if abs(target) < 1e-4 or np.sign(target) != np.sign(current):
                 self._trade_returns[i] = 0.0
             self._positions[i] = target
@@ -333,6 +358,27 @@ class TaiwanStockEnv(gym.Env):
         return total_cost / max(self._portfolio_value, 1e-8)
 
     def _update_portfolio(self, log_returns: np.ndarray):
+        if _NUMBA_AVAILABLE:
+            new_pv, new_peak, new_mdd, new_tr = update_portfolio_kernel(
+                self._positions,
+                log_returns,
+                self._trade_returns,
+                self._portfolio_value,
+                self._peak_value,
+                self._max_drawdown,
+                self._cash_weight,
+                self.SHORT_RATE_DAILY,
+                self.MARGIN_RATE_DAILY,
+            )
+            self._portfolio_value = float(new_pv)
+            self._peak_value = float(new_peak)
+            self._max_drawdown = float(new_mdd)
+            self._trade_returns = new_tr.astype(np.float32)
+            # Update return history (deque must stay in Python)
+            log_r = float(np.log(max(new_pv, 1e-8) / max(self._portfolio_value, 1e-8)))
+            return
+
+        # Fallback path
         daily_returns = np.exp(log_returns) - 1.0
         daily_pnl = np.sum(self._portfolio_value * self._positions * daily_returns)
         self._portfolio_value += daily_pnl
@@ -345,7 +391,6 @@ class TaiwanStockEnv(gym.Env):
         )
         self._portfolio_value -= borrow_cost
         
-        # Calculate margin loan interest for negative cash
         if self._cash_weight < 0:
             margin_loan_amount = self._portfolio_value * abs(self._cash_weight)
             margin_interest = margin_loan_amount * self.MARGIN_RATE_DAILY
@@ -360,6 +405,7 @@ class TaiwanStockEnv(gym.Env):
             self._peak_value = self._portfolio_value
         dd = (self._peak_value - self._portfolio_value) / max(self._peak_value, 1e-8)
         self._max_drawdown = max(self._max_drawdown, dd)
+
 
     def _current_drawdown(self) -> float:
         return (self._peak_value - self._portfolio_value) / max(
@@ -394,13 +440,43 @@ class TaiwanStockEnv(gym.Env):
         log_r = np.log(max(curr_value, 1e-8) / max(prev_value, 1e-8))
         self._return_history.append(log_r)
 
-        capital_util = np.sum(np.abs(self._positions))
-        return_component = _softsign(log_r * 100)
+        capital_util = float(np.sum(np.abs(self._positions)))
+        cash_ratio = (
+            float(self._cash_weight)
+            if self.enable_cash_action
+            else max(0.0, 1.0 - capital_util)
+        )
+        raw_dd = self._current_drawdown()
         _, sortino_proxy, _ = self._compute_pomdp_features()
 
+        if _NUMBA_AVAILABLE:
+            return compute_reward_kernel(
+                float(log_r),
+                float(self._benchmark_log_r),
+                float(sortino_proxy),
+                float(capital_util),
+                float(trade_cost),
+                float(self._last_turnover),
+                float(cash_ratio),
+                float(raw_dd),
+                bool(self.use_benchmark_reward),
+                bool(self.enable_margin_short),
+                bool(self.enable_cash_action),
+                len(self._return_history),
+                LAMBDA_COST,
+                LAMBDA_TURNOVER,
+                LAMBDA_CASH,
+                LAMBDA_DRAWDOWN,
+                REWARD_REF_DD,
+                REGIME_DD_THRESHOLD,
+                REGIME_PENALTY_COEF,
+                LAMBDA_CASH_DEFENSIVE,
+            )
+
+        # Fallback pure-Python path
+        return_component = _softsign(log_r * 100)
         if len(self._return_history) >= 5:
             sortino_component = sortino_proxy * capital_util
-
             if self.use_benchmark_reward:
                 benchmark_component = _softsign((log_r - self._benchmark_log_r) * 100)
                 hybrid_reward = (
@@ -418,17 +494,9 @@ class TaiwanStockEnv(gym.Env):
                 hybrid_reward = return_component
 
         cost_p = LAMBDA_COST * trade_cost
-        turnover_p = LAMBDA_TURNOVER * (self._last_turnover / 2.0) # Normalized turnover penalty
-        cash_ratio = (
-            float(self._cash_weight)
-            if self.enable_cash_action
-            else max(0.0, 1.0 - np.sum(np.abs(self._positions)))
-        )
+        turnover_p = LAMBDA_TURNOVER * (self._last_turnover / 2.0)
         cash_p = LAMBDA_CASH * cash_ratio
-
-        raw_dd = self._current_drawdown()
         drawdown_p = LAMBDA_DRAWDOWN * max(0.0, raw_dd - REWARD_REF_DD)
-
         regime_penalty = 0.0
         if raw_dd > REGIME_DD_THRESHOLD and not self.enable_margin_short:
             stock_exposure = np.sum(np.abs(self._positions))
@@ -437,7 +505,6 @@ class TaiwanStockEnv(gym.Env):
                 * stock_exposure
                 * (raw_dd - REGIME_DD_THRESHOLD)
             )
-
         cash_defensive_bonus = 0.0
         if raw_dd > REGIME_DD_THRESHOLD and self.enable_cash_action:
             cash_defensive_bonus = (
@@ -445,12 +512,12 @@ class TaiwanStockEnv(gym.Env):
                 * cash_ratio
                 * (raw_dd - REGIME_DD_THRESHOLD)
             )
-
         return float(np.clip(
             hybrid_reward - cost_p - turnover_p - cash_p
             - drawdown_p - regime_penalty + cash_defensive_bonus,
             -1.0, 1.0,
         ))
+
 
     def _get_observation(self) -> np.ndarray:
         start = self._current_step - self.window_size
