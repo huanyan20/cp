@@ -90,6 +90,7 @@ def run_research_matrix(
     overwrite: bool = False,
     overnight_feature_path: str | None = None,
     temporal_extractor: bool = False,
+    sl_scores_dir: str | None = None,
 ):
     algos = algos or ["ppo", "sac"]
     cash_modes = cash_modes or [True, False]
@@ -119,6 +120,7 @@ def run_research_matrix(
                 overnight_feature_path,
                 temporal_extractor,
                 overwrite,
+                sl_scores_dir,
             )
     else:
         print(f"Starting multiprocessing with {max_workers} workers for {len(pending_tasks)} tasks...")
@@ -136,6 +138,7 @@ def run_research_matrix(
                         overnight_feature_path,
                         temporal_extractor,
                         overwrite,
+                        sl_scores_dir,
                     )
                 )
             for future in concurrent.futures.as_completed(futures):
@@ -154,6 +157,7 @@ def run_candidate_set(
     overnight_feature_path: str | None = None,
     temporal_extractor: bool = False,
     candidate_pairs: list[tuple[str, bool]] | None = None,
+    sl_scores_dir: str | None = None,
 ):
     """O3: train only the curated candidate set (SAC enabled + PPO disabled).
 
@@ -196,6 +200,7 @@ def run_candidate_set(
                 overnight_feature_path,
                 temporal_extractor,
                 overwrite,
+                sl_scores_dir,
             )
     else:
         print(f"Starting multiprocessing with {max_workers} workers for {len(pending)} tasks...")
@@ -213,6 +218,7 @@ def run_candidate_set(
                         overnight_feature_path,
                         temporal_extractor,
                         overwrite,
+                        sl_scores_dir,
                     )
                 )
             for future in concurrent.futures.as_completed(futures):
@@ -232,6 +238,7 @@ def run_walk_forward(
     overwrite: bool = False,
     overnight_feature_path: str | None = None,
     temporal_extractor: bool = False,
+    sl_scores_dir: str | None = None,
 ):
     seeds = seeds or DEFAULT_SEEDS
     pending_tasks = build_pending_walk_forward_tasks(
@@ -259,6 +266,7 @@ def run_walk_forward(
                 overnight_feature_path,
                 temporal_extractor,
                 overwrite,
+                sl_scores_dir,
             )
     else:
         print(f"Starting multiprocessing with {max_workers} workers for {len(pending_seeds)} tasks...")
@@ -276,6 +284,7 @@ def run_walk_forward(
                         overnight_feature_path,
                         temporal_extractor,
                         overwrite,
+                        sl_scores_dir,
                     )
                 )
             for future in concurrent.futures.as_completed(futures):
@@ -294,6 +303,7 @@ def _run_single_walk_forward(
     overnight_feature_path: str | None = None,
     temporal_extractor: bool = False,
     overwrite: bool = False,
+    sl_scores_dir: str | None = None,
 ):
     os.makedirs(RESULTS_DIR, exist_ok=True)
     tickers = TICKERS_TECH_EXPANDED
@@ -341,6 +351,19 @@ def _run_single_walk_forward(
         if period.get("was_clamped"):
             print("  Note: period end was clamped to available calendar date.")
 
+        sl_scores = None
+        enable_sl_features = False
+        if sl_scores_dir:
+            import pandas as pd
+            csv_path = Path(sl_scores_dir) / f"scores_{name}_h5.csv"
+            if csv_path.exists():
+                sl_df = pd.read_csv(csv_path, index_col=0, parse_dates=True)
+                sl_scores = {str(col): sl_df[col] for col in sl_df.columns}
+                enable_sl_features = True
+                print(f"  [SL Features] Loaded from {csv_path}")
+            else:
+                print(f"  [Warning] SL scores not found at {csv_path}, disabling SL features.")
+
         feature_suffix = feature_suffix_from_path(overnight_feature_path)
         model_path = build_artifact_paths(
             algo,
@@ -366,6 +389,8 @@ def _run_single_walk_forward(
                 enable_cash_action=enable_cash_action,
                 enable_margin_short=enable_margin_short,
                 overnight_feature_path=overnight_feature_path,
+                enable_sl_features=enable_sl_features,
+                sl_scores=sl_scores,
             )
 
             train_and_save_model(
@@ -387,6 +412,8 @@ def _run_single_walk_forward(
             enable_cash_action=enable_cash_action,
             enable_margin_short=enable_margin_short,
             overnight_feature_path=overnight_feature_path,
+            enable_sl_features=enable_sl_features,
+            sl_scores=sl_scores,
         )
 
         # Load trained model
@@ -426,17 +453,29 @@ def _run_single_walk_forward(
         all_cash_weights.extend(eval_results["cash_weights"])
         all_turnover.extend(eval_results["turnover"])
 
+        # ── Free memory before next period ──────────────────────────────
+        # PyTorch model (GPU weights), market_data (large numpy array in
+        # IndexedReplayBuffer), and sl_data must all be released here.
+        # Without this, memory accumulates across periods → OOM at period 3+.
         print(
             f"  Return={p_metrics['total_return'] * 100:.2f}% | "
             f"MDD={p_metrics['max_drawdown'] * 100:.2f}% | "
             f"Sortino={p_metrics['sortino']:.2f} | "
             f"Cash={p_metrics['avg_cash_weight'] * 100:.2f}%"
         )
-
+        import gc as _gc
         del model, test_env
         if train_env is not None:
             del train_env
-        gc.collect()
+        train_env = None
+        _gc.collect()
+        try:
+            import torch as _th
+            _th.cuda.empty_cache()
+        except Exception:
+            pass
+        # ────────────────────────────────────────────────────────────────
+
 
     if not all_daily_returns:
         print(f"Seed {seed} produced no OOS data.")
@@ -537,6 +576,7 @@ def plot_walk_forward(
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Walk-forward research validation")
+    parser.add_argument("--sl-scores-dir", type=str, default=None, help="Path to directory containing sl_scores_{period}_h5.csv for S5 Integration")
     parser.add_argument("--timesteps", type=int, default=DEFAULT_TIMESTEPS)
     parser.add_argument("--algo", choices=["ppo", "sac", "both"], default=SETTINGS.research.default_algo)
     parser.add_argument(
@@ -608,6 +648,7 @@ if __name__ == "__main__":
             overwrite=args.overwrite,
             overnight_feature_path=args.overnight_feature_path,
             temporal_extractor=args.temporal_extractor,
+            sl_scores_dir=args.sl_scores_dir,
         )
     else:
         algos = ["ppo", "sac"] if args.algo == "both" else [args.algo]
@@ -626,4 +667,5 @@ if __name__ == "__main__":
             overwrite=args.overwrite,
             overnight_feature_path=args.overnight_feature_path,
             temporal_extractor=args.temporal_extractor,
+            sl_scores_dir=args.sl_scores_dir,
         )

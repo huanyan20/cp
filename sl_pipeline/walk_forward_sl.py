@@ -226,6 +226,12 @@ def run_walk_forward_sl(
             test_start=period["test_start"],
         )
 
+        if output_dir:
+            out_d = Path(output_dir)
+            out_d.mkdir(parents=True, exist_ok=True)
+            scores_path = out_d / f"scores_{name}_h{horizon}.csv"
+            generator.save_scores(scores, scores_path)
+
         combined_test = {**train_data, **test_data}
         backtest = simulate_period(
             combined_test,
@@ -409,7 +415,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(payload, indent=2))
     if "promotion_gate" in result:
         status = "APPROVED" if result["promotion_gate"]["can_promote"] else "BLOCKED"
-        print(f"\nSL Promotion Gate: {status} — {result['promotion_gate']['summary']}")
+        safe_summary = result['promotion_gate']['summary'].replace('\u2713', '[PASS]').replace('\u2717', '[FAIL]')
+        print(f"\nSL Promotion Gate: {status} - {safe_summary}")
     return 0
 
 

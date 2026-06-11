@@ -141,8 +141,10 @@ GNN extractor + 視窗 obs + Top-K decode + IndexedReplayBuffer (P8)
 | **M1b** | done | reward r5 |
 | **M1d** | done | softmax_temp 1.0 |
 | **M1c** | done | top-k entropy floor 5% |
-| **M2-smoke** | pending | r5.1 · 300K seed42 · 需人類確認 |
-| **M2-candidate** | blocked | blocked_by M2-smoke |
+| **M2-smoke** | cancelled | 中止，轉 S5 Option B |
+| **S5 Integration** | **done** | `--sl-scores-dir` CLI + `build_sl_feature_arrays` in `build_train_env`/`build_eval_env`; 短測 5K 步驗證通過 |
+| **S5 Full 300K WF** | pending | 等待執行：`walk_forward.py --timesteps 300000 --sl-scores-dir results_dir` |
+| **M2-candidate** | blocked | blocked_by S5 Full WF 結果（評估是否需要 candidate 對比） |
 | **M2-promotion** | blocked | blocked_by M2-candidate |
 | SAC-R | frozen | 封存，不進 active queue |
 | R7b | cancelled | 已停止 |
@@ -185,4 +187,5 @@ GNN extractor + 視窗 obs + Top-K decode + IndexedReplayBuffer (P8)
 | 2026-06-11 | v3：RL rebuild；SAC-R freeze；R7b stop；queue → M1/M2 |
 | 2026-06-11 | v3.1：砍 R7b 腳本、SAC_GRADIENT_STEPS、R8/R9；封存 SAC_BUFFER_PLAN 排程 |
 | 2026-06-11 | v3.2：全 repo 文件對齊 v3；外部審核 brief `V3-STRATEGY-REVIEW-BRIEF.md` |
-| 2026-06-12 | v3.3：M2-smoke 中止；M1d+M1c action decode；`ENV_CONFIG_VERSION=r5.1` |
+| 2026-06-11 | v3.3：M2-smoke 中止；M1d+M1c action decode；`ENV_CONFIG_VERSION=r5.1` |
+| 2026-06-11 | v3.4：S5 Option B 整合完成；`--sl-scores-dir` CLI；`build_sl_feature_arrays` 接通 `TaiwanStockEnv`；短測 5K 步驗證通過 |

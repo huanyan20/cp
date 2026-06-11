@@ -1,76 +1,205 @@
 {
-  "version": 4,
-  "phase": "rl_rebuild_v3",
-  "updated_at": "2026-06-12T03:30:00+08:00",
-  "goal": "r5 RL rebuild — align reward/obs with Drawdown Gate (MDD ≤ 35%)",
-  "strategy_note": "r5.1 ready; quick 30K pass (MDD 31.9%, top 18.3%); M2-smoke 300K awaits human confirm",
-  "terminate_when": {
-    "gate_approved": true,
-    "or_queue_all_done": true,
-    "or_rl_path_paused": true
-  },
-  "gate": {
-    "status": "blocked",
-    "failed_checks": ["Drawdown Gate"],
-    "note": "R6 reference worst MDD 44.41%; r5 rebuild required before retry",
-    "r4_baseline_worst_mdd": 0.4441
-  },
-  "research_lines": {
-    "sac_classic": {
-      "description": "GNN + window obs + IndexedReplayBuffer — r5 rebuild target",
-      "baseline_dir": ".research/baselines/sac_classic/",
-      "branch": "main",
-      "status": "active",
-      "env_config_target": "r5.1"
-    },
-    "sac_r": {
-      "description": "Recurrent SAC — daily obs + LSTM",
-      "baseline_dir": ".research/baselines/sac_r/",
-      "branch": "feat/sac-r-recurrent",
-      "worktree": "../cp-sac-r",
-      "status": "frozen",
-      "note": "R-S0~S2 done; handoff preserved; no train_slot until unfrozen"
-    }
-  },
-  "artifacts": {
-    "plan": "docs/RESEARCH_STRATEGY_V3.md",
-    "plan_legacy_stub": "docs/SAC_BUFFER_PLAN.md",
-    "plan_legacy_full": "docs/archive/SAC_BUFFER_PLAN_v2.md",
-    "archive": ".research/archive/README.md",
-    "review_brief": ".research/reviews/V3-STRATEGY-REVIEW-BRIEF.md",
-    "external_brief": ".research/EXTERNAL_AGENT_BRIEF.md",
-    "r4_baselines": ".research/baselines/",
-    "algorithm_review": "docs/ALGORITHM_REVIEW.md",
-    "decision_review": ".research/decisions/decision_algorithm_review.md",
-    "quick_smoke_metrics": ".research/runs/m2-smoke-quick-metrics.json",
-    "v3_review": ".research/reviews/V3-reviewed-by-cursor-r2.md",
-    "v3_review_r1": ".research/reviews/V3-reviewed-by-codex.md",
-    "v3_review_verdict": "pass_with_nits"
-  },
-  "train_slot": {
-    "status": "free",
-    "owner": null,
-    "note": "M2-smoke-quick done 2025H1 30K; pending full 300K smoke confirm"
-  },
-  "queue": [
-    { "id": "P8", "status": "done", "line": "sac_classic", "note": "IndexedReplayBuffer merged — infrastructure for r5" },
-    { "id": "R7", "status": "cancelled", "line": "sac_classic" },
-    { "id": "R7b", "status": "cancelled", "line": "sac_classic", "note": "Cut: script deleted, SAC_GRADIENT_STEPS removed" },
-    { "id": "R8", "status": "cancelled", "line": "sac_classic", "note": "Cut: sl_only obs throughput — no MDD leverage" },
-    { "id": "R9", "status": "cancelled", "line": "sac_classic", "note": "Cut: PER — revisit only in M3 if r5 fails" },
-    { "id": "R-S0", "status": "done", "line": "sac_r" },
-    { "id": "R-S1", "status": "done", "line": "sac_r" },
-    { "id": "R-S2", "status": "done", "line": "sac_r", "note": "frozen with line" },
-    { "id": "R-S2b", "status": "frozen", "line": "sac_r" },
-    { "id": "R-S3", "status": "frozen", "line": "sac_r" },
-    { "id": "V3-review", "status": "done", "line": "meta", "title": "v3 review round 1", "verdict": "block_remediated", "review": ".research/reviews/V3-reviewed-by-codex.md" },
-    { "id": "V3-review-r2", "status": "done", "line": "meta", "title": "v3 review round 2 — archive cleanup", "brief": ".research/reviews/V3-STRATEGY-REVIEW-BRIEF.md", "review": ".research/reviews/V3-reviewed-by-cursor-r2.md", "verdict": "pass_with_nits", "also_reviewed": ".research/reviews/V3-reviewed-by-antigravity-r2.md", "blocked_by": [] },
-    { "id": "M1a", "status": "done", "line": "sac_classic", "title": "obs POMDP fix — rolling vol/sortino/dd in state", "note": "NUM_ACCOUNT_FEATURES 6→9; tests/test_m1a_pomdp_obs.py", "blocked_by": [] },
-    { "id": "M1b", "status": "done", "line": "sac_classic", "title": "reward r5 + ENV_CONFIG_VERSION bump", "note": "LAMBDA_DRAWDOWN 1.2, REWARD_REF_DD 0.02, REGIME 6%/1.5x, CASH_DEF 0.35", "blocked_by": ["M1a"] },
-    { "id": "M1d", "status": "done", "line": "sac_classic", "title": "softmax_temp 0.5 → 1.0 (action decode P0)", "note": "settings+trading_env default 1.0; tests/test_action_decode.py", "blocked_by": ["M1b"] },
-    { "id": "M1c", "status": "done", "line": "sac_classic", "title": "top-k entropy floor min 5% per stock", "note": "MIN_TOP_K_WEIGHT=0.05", "blocked_by": ["M1d"] },
-    { "id": "M2-smoke", "status": "pending", "line": "sac_classic", "title": "tier smoke 300K seed42", "blocked_by": [], "script": "walk_forward.py --tier smoke --algo sac --cash-mode enabled", "note": "AWAITING_HUMAN_CONFIRM; quick 30K: MDD 31.87% top 18.3% (directional pass)", "quick_ref": ".research/runs/m2-smoke-quick-metrics.json" },
-    { "id": "M2-candidate", "status": "blocked", "line": "sac_classic", "title": "tier candidate seeds 42,43", "blocked_by": ["M2-smoke"] },
-    { "id": "M2-promotion", "status": "blocked", "line": "sac_classic", "title": "tier promotion + Gate retry", "blocked_by": ["M2-candidate"] }
-  ]
+    "version":  4,
+    "phase":  "rl_rebuild_v3",
+    "updated_at":  "2026-06-11T19:20:42.303045+08:00",
+    "goal":  "r5 RL rebuild ??align reward/obs with Drawdown Gate (MDD ??35%)",
+    "strategy_note":  "r5.1 ready; quick 30K pass (MDD 31.9%, top 18.3%); M2-smoke 300K awaits human confirm",
+    "terminate_when":  {
+                           "gate_approved":  true,
+                           "or_queue_all_done":  true,
+                           "or_rl_path_paused":  true
+                       },
+    "gate":  {
+                 "status":  "blocked",
+                 "failed_checks":  [
+                                       "Drawdown Gate"
+                                   ],
+                 "note":  "R6 reference worst MDD 44.41%; r5 rebuild required before retry",
+                 "r4_baseline_worst_mdd":  0.4441
+             },
+    "research_lines":  {
+                           "sac_classic":  {
+                                               "description":  "GNN + window obs + IndexedReplayBuffer ??r5 rebuild target",
+                                               "baseline_dir":  ".research/baselines/sac_classic/",
+                                               "branch":  "main",
+                                               "status":  "active",
+                                               "env_config_target":  "r5.1"
+                                           },
+                           "sac_r":  {
+                                         "description":  "Recurrent SAC ??daily obs + LSTM",
+                                         "baseline_dir":  ".research/baselines/sac_r/",
+                                         "branch":  "feat/sac-r-recurrent",
+                                         "worktree":  "../cp-sac-r",
+                                         "status":  "frozen",
+                                         "note":  "R-S0~S2 done; handoff preserved; no train_slot until unfrozen"
+                                     }
+                       },
+    "artifacts":  {
+                      "plan":  "docs/RESEARCH_STRATEGY_V3.md",
+                      "plan_legacy_stub":  "docs/SAC_BUFFER_PLAN.md",
+                      "plan_legacy_full":  "docs/archive/SAC_BUFFER_PLAN_v2.md",
+                      "archive":  ".research/archive/README.md",
+                      "review_brief":  ".research/reviews/V3-STRATEGY-REVIEW-BRIEF.md",
+                      "external_brief":  ".research/EXTERNAL_AGENT_BRIEF.md",
+                      "r4_baselines":  ".research/baselines/",
+                      "algorithm_review":  "docs/ALGORITHM_REVIEW.md",
+                      "decision_review":  ".research/decisions/decision_algorithm_review.md",
+                      "quick_smoke_metrics":  ".research/runs/m2-smoke-quick-metrics.json",
+                      "v3_review":  ".research/reviews/V3-reviewed-by-cursor-r2.md",
+                      "v3_review_r1":  ".research/reviews/V3-reviewed-by-codex.md",
+                      "v3_review_verdict":  "pass_with_nits"
+                  },
+    "train_slot":  {
+                       "status":  "running",
+                       "owner":  "M2-smoke",
+                       "note":  "M2-smoke 300K running"
+                   },
+    "queue":  [
+                  {
+                      "id":  "P8",
+                      "status":  "done",
+                      "line":  "sac_classic",
+                      "note":  "IndexedReplayBuffer merged ??infrastructure for r5"
+                  },
+                  {
+                      "id":  "R7",
+                      "status":  "cancelled",
+                      "line":  "sac_classic"
+                  },
+                  {
+                      "id":  "R7b",
+                      "status":  "cancelled",
+                      "line":  "sac_classic",
+                      "note":  "Cut: script deleted, SAC_GRADIENT_STEPS removed"
+                  },
+                  {
+                      "id":  "R8",
+                      "status":  "cancelled",
+                      "line":  "sac_classic",
+                      "note":  "Cut: sl_only obs throughput ??no MDD leverage"
+                  },
+                  {
+                      "id":  "R9",
+                      "status":  "cancelled",
+                      "line":  "sac_classic",
+                      "note":  "Cut: PER ??revisit only in M3 if r5 fails"
+                  },
+                  {
+                      "id":  "R-S0",
+                      "status":  "done",
+                      "line":  "sac_r"
+                  },
+                  {
+                      "id":  "R-S1",
+                      "status":  "done",
+                      "line":  "sac_r"
+                  },
+                  {
+                      "id":  "R-S2",
+                      "status":  "done",
+                      "line":  "sac_r",
+                      "note":  "frozen with line"
+                  },
+                  {
+                      "id":  "R-S2b",
+                      "status":  "frozen",
+                      "line":  "sac_r"
+                  },
+                  {
+                      "id":  "R-S3",
+                      "status":  "frozen",
+                      "line":  "sac_r"
+                  },
+                  {
+                      "id":  "V3-review",
+                      "status":  "done",
+                      "line":  "meta",
+                      "title":  "v3 review round 1",
+                      "verdict":  "block_remediated",
+                      "review":  ".research/reviews/V3-reviewed-by-codex.md"
+                  },
+                  {
+                      "id":  "V3-review-r2",
+                      "status":  "done",
+                      "line":  "meta",
+                      "title":  "v3 review round 2 ??archive cleanup",
+                      "brief":  ".research/reviews/V3-STRATEGY-REVIEW-BRIEF.md",
+                      "review":  ".research/reviews/V3-reviewed-by-cursor-r2.md",
+                      "verdict":  "pass_with_nits",
+                      "also_reviewed":  ".research/reviews/V3-reviewed-by-antigravity-r2.md",
+                      "blocked_by":  [
+
+                                     ]
+                  },
+                  {
+                      "id":  "M1a",
+                      "status":  "done",
+                      "line":  "sac_classic",
+                      "title":  "obs POMDP fix ??rolling vol/sortino/dd in state",
+                      "note":  "NUM_ACCOUNT_FEATURES 6??; tests/test_m1a_pomdp_obs.py",
+                      "blocked_by":  [
+
+                                     ]
+                  },
+                  {
+                      "id":  "M1b",
+                      "status":  "done",
+                      "line":  "sac_classic",
+                      "title":  "reward r5 + ENV_CONFIG_VERSION bump",
+                      "note":  "LAMBDA_DRAWDOWN 1.2, REWARD_REF_DD 0.02, REGIME 6%/1.5x, CASH_DEF 0.35",
+                      "blocked_by":  [
+                                         "M1a"
+                                     ]
+                  },
+                  {
+                      "id":  "M1d",
+                      "status":  "done",
+                      "line":  "sac_classic",
+                      "title":  "softmax_temp 0.5 ??1.0 (action decode P0)",
+                      "note":  "settings+trading_env default 1.0; tests/test_action_decode.py",
+                      "blocked_by":  [
+                                         "M1b"
+                                     ]
+                  },
+                  {
+                      "id":  "M1c",
+                      "status":  "done",
+                      "line":  "sac_classic",
+                      "title":  "top-k entropy floor min 5% per stock",
+                      "note":  "MIN_TOP_K_WEIGHT=0.05",
+                      "blocked_by":  [
+                                         "M1d"
+                                     ]
+                  },
+                  {
+                      "id":  "M2-smoke",
+                      "status":  "in_progress",
+                      "line":  "sac_classic",
+                      "title":  "tier smoke 300K seed42",
+                      "blocked_by":  [
+
+                                     ],
+                      "script":  "walk_forward.py --tier smoke --algo sac --cash-mode enabled",
+                      "note":  "started full 300K smoke",
+                      "quick_ref":  ".research/runs/m2-smoke-quick-metrics.json"
+                  },
+                  {
+                      "id":  "M2-candidate",
+                      "status":  "blocked",
+                      "line":  "sac_classic",
+                      "title":  "tier candidate seeds 42,43",
+                      "blocked_by":  [
+                                         "M2-smoke"
+                                     ]
+                  },
+                  {
+                      "id":  "M2-promotion",
+                      "status":  "blocked",
+                      "line":  "sac_classic",
+                      "title":  "tier promotion + Gate retry",
+                      "blocked_by":  [
+                                         "M2-candidate"
+                                     ]
+                  }
+              ]
 }

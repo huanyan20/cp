@@ -242,6 +242,8 @@ def main():
     # ==========================================
     # Step 0: 自動登入與執行前一日 Pending BUY 單
     # ==========================================
+    success_pending = False
+    pending_output = ""
     try:
         logger.info("[自動登入] 正在背景換取最新 Cookie...")
         login_cmd = [sys.executable, "auto_login.py"]
@@ -304,15 +306,19 @@ def main():
 
     if not success:
         msg = "Step 1 Failed: evaluate_portfolio.py encountered an error after multiple retries."
+        if success_pending:
+            msg += "\n\n[!!! CRITICAL ACTION REQUIRED !!!]\nT+1 Pending BUYS were executed successfully today, but the model failed to generate SELL signals. Your portfolio is now UNBALANCED (holding excess positions). You MUST manually execute CMoney RPA to clear old positions or use the CMoney Web UI to sell."
         logger.critical(msg)
-        send_notification(msg, "ERROR")
+        send_notification(msg, "CRITICAL")
         sys.exit(1)
 
     # Check if signal.json was generated
     if not os.path.exists(str(SETTINGS.paths.signal_path)):
         msg = "Step 1 Failed: signal.json was not found. Model evaluation might have failed silently."
+        if success_pending:
+            msg += "\n\n[!!! CRITICAL ACTION REQUIRED !!!]\nT+1 Pending BUYS were executed successfully today, but the model failed to generate SELL signals. Your portfolio is now UNBALANCED (holding excess positions). You MUST manually execute CMoney RPA to clear old positions or use the CMoney Web UI to sell."
         logger.critical(msg)
-        send_notification(msg, "ERROR")
+        send_notification(msg, "CRITICAL")
         sys.exit(1)
 
     logger.info("signal.json successfully generated.")
@@ -322,8 +328,10 @@ def main():
         logger.info(f"Dry-run diff written to {DRY_RUN_DIFF_PATH}")
     except Exception as e:
         msg = f"Dry-run diff validation failed: {e}"
+        if success_pending:
+            msg += "\n\n[!!! CRITICAL ACTION REQUIRED !!!]\nT+1 Pending BUYS were executed successfully today, but validation failed (e.g. circuit breaker triggered). Your portfolio is now UNBALANCED (holding excess positions). You MUST manually execute CMoney RPA to clear old positions or use the CMoney Web UI to sell."
         logger.critical(msg)
-        send_notification(msg, "ERROR")
+        send_notification(msg, "CRITICAL")
         sys.exit(1)
 
     # ==========================================

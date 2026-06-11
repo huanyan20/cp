@@ -1,3 +1,90 @@
+# Architecture
+
+> 系統架構精簡版（從 `教學文件.md` 收斂，O4）。完整逐模組教學仍見 `教學文件.md`。
+
+## 1. 定位
+
+以強化學習（PPO / SAC）管理約 45 支台股科技/電子股投資組合的端到端系統，涵蓋
+**離線研究**（訓練 → Walk-Forward 驗證 → Promotion Gate）與
+**每日生產**（推論 → 風控 → CMoney 大富翁 RPA 下單）。
+
+## 2. 兩條主線
+
+```mermaid
+flowchart TB
+    subgraph Research["研究管線（離線）"]
+        DP["data_pipeline/"] --> ENV["TaiwanStockEnv"]
+        CF["capital_flow_analysis/"] -. risk overlay .-> ENV
+        ENV --> WF["walk_forward.py / research_pipeline.py"]
+        WF --> RESULTS["results_dir/ metrics_*.json"]
+        RESULTS --> REPORT["experiment_report.py"]
+        REPORT --> GATE["promotion_gate.py（8 checks）"]
+    end
+
+    subgraph Production["每日生產（線上）"]
+        MACRO["preopen_macro_check.py"] --> EVAL["evaluate_portfolio.py"]
+        EVAL --> SIGNAL["signal.json"]
+        SIGNAL --> GUARD["trade_guard.py（dry-run diff + risk）"]
+        GUARD --> RPA["cmoney_rpa.py"]
+        RPA --> RUNNER["daily_trade_runner.py（排程 + Email）"]
+    end
+
+    GATE -.->|APPROVED 才可上線| EVAL
+```
+
+## 3. 核心模組
+
+| 層 | 模組 | 職責 |
+|----|------|------|
+| 環境 | `trading_env.py` | `TaiwanStockEnv`：MDP（state / action / reward） |
+| 特徵 | `gnn_extractor.py` | 跨股 Self-Attention 特徵提取器（含 GRU temporal 變體） |
+| 資料 | `data_pipeline/`、`data_loader.py` | 市場抓取、技術指標、多股 enrichment |
+| 宏觀 | `capital_flow_analysis/` | 隔夜/宏觀特徵 + 盤前風控（risk overlay） |
+| 訓練 | `train_portfolio.py` | PPO / SAC 建模與訓練 |
+| 驗證 | `walk_forward.py`、`research_pipeline.py` | Walk-Forward 期間規劃、訓練/評估、metrics |
+| 報告 | `experiment_report.py`、`p5_analysis.py` | 排名、ablation/stress/baseline |
+| 關卡 | `promotion_gate.py` | 8 項品質 gate |
+| 推論 | `evaluate_portfolio.py` | 產生 `signal.json` |
+| 風控 | `trade_guard.py` | TTL / aid / risk limit / dry-run diff |
+| 下單 | `cmoney_rpa.py` + `cmoney_client.py` / `signal_validator.py` / `rebalance_planner.py` | RPA 下單子系統 |
+| 排程 | `daily_trade_runner.py` | 每日流程編排 + Email |
+| 設定 | `settings.py`、`env_config.py` | 集中設定 + 實驗版本指紋 |
+
+## 4. MDP 摘要
+
+- **State**：每股 20 天市場特徵（flatten）+ **9 個帳戶特徵**（現金比、累積報酬、回撤、持倉、單股報酬、持有天數、滾動 vol、滾動 Sortino proxy、當前回撤深度）（M1a 新增 3 項）。
+- **Action**：`Box(num_stocks(+1))` logits → softmax(**temp=1.0**，M1d 修正) → top-k(5) → 權重（可選現金維度；M1c：top-k 內 entropy floor 5%）。
+- **Reward**：`0.4·報酬 + 0.3·Sortino + 0.3·超越基準 − 成本 − 換手 − 回撤懲罰 − regime 懲罰 + 防禦現金獎勵`，`clip(-1,1)`。reward 常數版本由 `env_config.ENV_CONFIG_VERSION` 標記（目前 **`r5.1`**）。
+- 設計細節與 R5 調整見 [`ALGORITHM_REVIEW.md`](ALGORITHM_REVIEW.md)；已知風險見 [`RISK_REGISTER.md`](RISK_REGISTER.md)。
+
+## 5. 設定與版本治理
+
+- `settings.AppSettings`：`research` / `evaluation` / `live` / `paths` / `risk_limits` / `stress`，皆可由環境變數覆寫。
+- `env_config.py`：reward/regime/topk 等訓練語意參數的版本（人工標籤）+ 8 字元 hash；metrics 帶版本，`experiment_report.py` 預設只讀當前版本（O1）。
+
+## 6. 股票宇宙與 Macro 分離
+
+`stock_universe.py`：約 45 支 TWSE/TPEX 科技股（`TICKERS_TECH_EXPANDED`）。
+
+| 常數 | 用途 | 典型 tickers |
+|------|------|--------------|
+| `MACRO_TICKERS_RL` | RL 主線 observation | `^TWII`, `^IXIC`, `USDTWD=X` |
+| `MACRO_TICKERS_FLOW` | Capital Flow 研究 | VIX, TNX, BTC, NQ/ES futures, JPY, DXY 等 |
+| `MACRO_TICKERS` | 相容 alias → `MACRO_TICKERS_RL` | 新程式勿用 |
+
+**規則**：extended macro 接入 RL 須明確命名（`overnight_feature_path`、`macro_mode=extended`），不可悄悄改 baseline。Flow macro 不自動進 RL 預設（O6/R5）。
+
+## 7. 相關文件
+
+- [`../專案總覽.md`](../專案總覽.md)：計畫打勾與全局決策
+- [`README.md`](README.md)：文件索引
+- [`RESEARCH_PLAYBOOK.md`](RESEARCH_PLAYBOOK.md)：分層訓練、Promotion Gate、研究 CLI
+- [`SUPERVISED_LEARNING_PLAN.md`](SUPERVISED_LEARNING_PLAN.md)：SL 混合架構規格
+- [`LIVE_OPS.md`](LIVE_OPS.md)：每日生產流程與風控
+- [`ALGORITHM_REVIEW.md`](ALGORITHM_REVIEW.md)：演算法合理性評估
+- [`../教學文件.md`](../教學文件.md)：完整逐模組教學
+
+
 # 監督式學習混合架構設計（方案 B）
 
 > **狀態**：設計拍板（2026-06-09）
@@ -250,10 +337,10 @@ python walk_forward.py --sl-scores-path results_dir/sl_scores_5d.csv ...
 | **S1** | `sl_pipeline/` 骨架 + `labels` + `SignalGenerator` | ✅ |
 | **S2** | `RuleBasedAllocator`（§4 遲滯 + §5 階梯）+ `backtest` | ✅ |
 | **S3** | `walk_forward_sl` CLI + metrics JSON + Gate | ✅ 程式 |
-| **S3 執行** | 全 4 期 OOS 實跑 | ⬜ |
+| **S3 執行** | 全 4 期 OOS 實跑 | ✅（`metrics_sl_rule_h5_seed42.json` 產出；最新重跑 159.97% / 33.14% MDD） |
 | **S4** | `experiment_report` SL 區塊 + RL 對照 | ✅ |
 | **S5** | `RLAllocator` spike（`rl_spike` / `sl_features`） | ✅ spike |
-| **S5 整合** | 分數併入 `TaiwanStockEnv` 正式訓練 | ⬜ 第二階段 |
+| **S5 整合** | 分數併入 `TaiwanStockEnv` 正式訓練 | ✅ **完成**（`--sl-scores-dir` CLI + `build_sl_feature_arrays` + `trading_env.enable_sl_features`；5K 步短測驗證通過） |
 
 ---
 
@@ -275,3 +362,167 @@ python walk_forward.py --sl-scores-path results_dir/sl_scores_5d.csv ...
 - `ALGORITHM_REVIEW.md` — RL 合理性與 SL 建議
 - `../專案總覽.md` — R6 smoke / 全局打勾
 - `capital_flow_analysis/src/modeling/evaluate_gap_model.py` — LightGBM 參考
+
+
+# Research Playbook
+
+> **狀態**：v3 進行中 · **路線圖**：[`RESEARCH_STRATEGY_V3.md`](RESEARCH_STRATEGY_V3.md) · **入口**：[`../專案總覽.md`](../專案總覽.md)  
+> **目的**：r5 改動 → O2 分層重訓（smoke/candidate/promotion）→ Gate。R7/R7b/R8/R9 已砍。
+
+---
+
+## 1. 分層訓練協議（O2）
+
+砍掉無效的 full-matrix 重訓。每一層通過後才進下一層。
+
+| Tier | timesteps | seeds | 通過條件 | 用途 |
+|------|-----------|-------|----------|------|
+| `smoke` | 300K | 1 | 能跑完、MDD 方向不惡化 | reward / env 改動初篩 |
+| `candidate` | 300K | 2 | 2025H1 MDD 改善趨勢 | 確認是否值得 full run |
+| `promotion` | 300K | 3 | 通過 Drawdown Gate | 僅最佳候選 + 1 對照 |
+
+**規則**：
+
+- Smoke 不過 → 不進 Candidate
+- Candidate 方向錯 → 不進 Promotion
+- Promotion 只跑最佳候選與 1 個對照，不跑全矩陣
+
+`seeds` 取自 `--seeds`（預設 `42,43,44`）的前 N 個。tier 定義集中於 `settings.TIER_PRESETS`。
+
+---
+
+## 2. CLI 用法
+
+```bash
+# Smoke：改 reward 後健全性檢查（300K, seed 42）
+python walk_forward.py --tier smoke --algo sac --cash-mode enabled
+
+# Candidate：確認改善趨勢（300K, seed 42,43）
+python walk_forward.py --tier candidate --algo sac --cash-mode enabled
+
+# Promotion：最佳候選 + 對照（300K, seed 42,43,44）
+python walk_forward.py --tier promotion --algo sac --cash-mode enabled
+python walk_forward.py --tier promotion --algo ppo --cash-mode disabled
+
+# 不帶 --tier 時沿用 walk_forward_timesteps 預設（300K）
+python walk_forward.py --seeds 42,43,44
+```
+
+`--tier` 會覆寫 `--timesteps` 與 `--seeds`。也可用環境變數 `RESEARCH_TIER=smoke` 設預設。
+
+### 預設候選集 vs 全矩陣（O3）
+
+```bash
+# 候選集（推薦）：只訓練 SAC enabled + PPO disabled（歷史前二），非全矩陣
+python walk_forward.py --candidates --tier promotion
+
+# 全矩陣（opt-in，昂貴）：PPO/SAC x cash on/off x seeds x 4 periods（~18M steps@300K x3）
+python walk_forward.py --matrix --tier promotion
+```
+
+overnight features 為 opt-in（預設 base）。要產生 risk-overlay 對照才加 `--overnight-feature-path <csv>`。
+
+---
+
+## 3. 實驗版本治理（O1，依賴）
+
+改 reward / regime / topk 等影響訓練語意的參數時：
+
+1. 更新 `env_config.ENV_CONFIG_VERSION`（例如 `r4` → `r5`）
+2. 依分層協議重訓必要組合
+3. metrics JSON 自動帶 `env_config_version` / `env_config_hash`
+4. `experiment_report.py` 預設 `--current-env-only`，只讀當前版本，不混用舊世代
+
+```bash
+python experiment_report.py                     # 只讀當前 env
+python experiment_report.py --env-config-version r3   # R3/R4 對照
+python experiment_report.py --include-all-env-configs # 全世代（不建議用於 Gate）
+```
+
+---
+
+## 4. 完整研究迭代流程
+
+```text
+改 reward / env（bump ENV_CONFIG_VERSION）
+  ↓
+smoke（300K/1 seed）      ── 不過則回頭改參數
+  ↓ 方向正確
+candidate（300K/2 seeds） ── 趨勢錯則放棄此方向
+  ↓ MDD 改善趨勢
+promotion（300K/3 seeds，最佳候選 + 對照）
+
+（已拍板：timesteps 全 tier 統一 300K，tier 僅差 seed 數）
+  ↓
+python experiment_report.py   （自動只讀當前 env）
+  ↓
+Promotion Gate（8 checks）
+  ↓ APPROVED 才考慮上線
+```
+
+---
+
+## 5. Promotion Gate（驗收標準）
+
+最佳候選需同時滿足（門檻見 `settings.ResearchSettings`，可由環境變數覆寫）：
+
+| Gate | 預設門檻 |
+|------|----------|
+| Sortino 穩定性 | ≥ 0.8（跨 ≥ 3 seeds） |
+| Max Drawdown | worst-case ≤ 35% |
+| Turnover | ≤ 0.10 |
+| Cash behavior | cash-enabled 須有實際調整 |
+| Baseline / Ablation / Stress / Period consistency | 見 `promotion_gate.py` |
+
+目前狀態：`BLOCKED`，卡 Drawdown Gate（worst-case 38.71%）與 Ablation (Features)。詳見 [`../專案總覽.md`](../專案總覽.md) §5。
+
+---
+
+## 6. 測試與驗收
+
+```bash
+# O1 / O2 單元測試
+python -m unittest tests.test_env_config tests.test_settings tests.test_experiment_report -v
+
+# 全量回歸
+python -m unittest discover -s tests -p "test_*.py"
+
+# 報告（確認標頭含 env_config_version / hash）
+python experiment_report.py
+```
+
+---
+
+## 7. Risk Overlay 策略（O6 / R5 決策）
+
+**決策**：RL 主線維持 base features；隔夜/宏觀特徵作為「風險疊加層」，不進預設 observation。
+
+依據（ablation，見 [`../專案總覽.md`](../專案總覽.md) §5）：
+
+| 指標 | With Features | Without Features |
+|------|--------------:|-----------------:|
+| Sortino | 0.88 | 2.20 |
+| Total Return | 107.98% | 159.26% |
+| Max Drawdown | 25.46% | 36.12% |
+| Turnover | 0.45% | 3.15% |
+
+overnight features 改善回撤與換手，但明顯犧牲 Sortino 與總報酬 → 只能視為**風險抑制訊號**，
+不能當作提升 alpha 的預設輸入。
+
+**落地方式**：
+
+1. RL 訓練/評估預設 base features（`walk_forward.py --overnight-feature-path` 預設 None）。
+2. 宏觀風險改由 overlay 承接：盤前 `preopen_macro_check.py`（WARN 減半 / CRITICAL 跳過買單）
+   與 `trade_guard.py` 風險限額，而非塞進 state。
+3. `experiment_report.py` 將 `with_features` 拆為獨立「Risk Overlay」表，**不進主排名、不作 promotion 候選**。
+4. 要重新評估特徵時，以 opt-in 方式重訓：`walk_forward.py --overnight-feature-path <csv>`，
+   產出 `*_with_features` metrics，於 overlay 區比較。
+
+## 相關文件
+
+- [`../專案總覽.md`](../專案總覽.md)：計畫打勾與 Gate 狀態
+- [`ALGORITHM_REVIEW.md`](ALGORITHM_REVIEW.md)：算法合理性評估
+- [`archive/重構計畫_Phase2.md`](archive/重構計畫_Phase2.md)：O1–O6 歷史實作細節（封存）
+- [`../教學文件.md`](../教學文件.md)：系統架構與模組說明
+
+

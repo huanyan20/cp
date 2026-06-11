@@ -19,7 +19,7 @@ def fetch_and_process_data(
     window_size: int = 20,
 ) -> pd.DataFrame:
     print(f"> 正在下載 {ticker} 歷史數據 ({start_date} ~ {end_date})...")
-    raw = yf.download(ticker, start=start_date, end=end_date, progress=False)
+    raw = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False)
 
     if raw.empty:
         raise ValueError(f"無法下載 {ticker} 的資料，請確認股票代號與網路連線。")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 
 from cmoney_rpa import CMoneyRPA
@@ -72,13 +73,63 @@ def evaluate_risk_limits(signal: dict) -> dict:
     }
 
 
+def check_pnl_circuit_breaker(total_assets: float) -> dict:
+    """Checks the live equity curve for severe daily loss or overall drawdown."""
+    equity_file = Path("capital_flow_analysis/data/live_equity_curve.json")
+    equity_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    history = {}
+    if equity_file.exists():
+        try:
+            history = json.loads(equity_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            pass
+
+    # Sort history by date to find the last known equity
+    sorted_dates = sorted(history.keys())
+    last_equity = history[sorted_dates[-1]] if sorted_dates else total_assets
+    peak_equity = max(list(history.values()) + [total_assets]) if history else total_assets
+
+    daily_loss = (last_equity - total_assets) / last_equity if last_equity > 0 else 0
+    mdd = (peak_equity - total_assets) / peak_equity if peak_equity > 0 else 0
+
+    # Save today's equity
+    history[today_str] = total_assets
+    equity_file.write_text(json.dumps(history, indent=4), encoding="utf-8")
+
+    reasons = []
+    # Thresholds: 5% daily loss, 15% Max Drawdown
+    if daily_loss > 0.05:
+        reasons.append(f"CIRCUIT BREAKER: Daily loss {daily_loss*100:.2f}% exceeds 5% threshold.")
+    if mdd > 0.15:
+        reasons.append(f"CIRCUIT BREAKER: Max Drawdown {mdd*100:.2f}% exceeds 15% threshold.")
+
+    return {
+        "passed": not reasons,
+        "reasons": reasons,
+        "daily_loss": daily_loss,
+        "mdd": mdd
+    }
+
+
+
 def generate_diff(signal_path: str, aid: str, output_path: str | None = None) -> Path:
     signal = load_signal(signal_path, aid, ttl_seconds=SETTINGS.live.signal_ttl_seconds)
     rpa = CMoneyRPA(aid=aid)
     try:
-        inventory = _load_inventory_rows(rpa)
+        status = rpa.get_account_status()
+        inventory = _inventory_rows_from_account_status(status)
+        total_assets = status.get("total_assets", 0.0)
+
         diff = build_dry_run_diff(signal, inventory)
         risk_checks = evaluate_risk_limits(signal)
+        
+        cb_result = check_pnl_circuit_breaker(total_assets)
+        if not cb_result["passed"]:
+            risk_checks["passed"] = False
+            risk_checks["reasons"].extend(cb_result["reasons"])
+            
         diff["risk_checks"] = risk_checks
         if not risk_checks["passed"]:
             raise RuntimeError("; ".join(risk_checks["reasons"]))

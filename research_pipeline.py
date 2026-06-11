@@ -263,6 +263,8 @@ def build_eval_env(
     enable_cash_action: bool = True,
     enable_margin_short: bool = False,
     overnight_feature_path: str | None = None,
+    enable_sl_features: bool = False,
+    sl_scores: dict | None = None,
 ) -> tuple[TaiwanStockEnv, dict]:
     """
     Build evaluation environment from period data.
@@ -305,6 +307,14 @@ def build_eval_env(
             slice_start = max(0, start_idx - window_size)
             test_data[ticker] = df.iloc[slice_start:]
     
+    sl_feature_arrays = None
+    if enable_sl_features:
+        if not sl_scores:
+            raise ValueError("enable_sl_features requires sl_scores.")
+        from sl_pipeline.sl_features import build_sl_feature_arrays
+
+        sl_feature_arrays = build_sl_feature_arrays(test_data, sl_scores, tickers)
+
     test_env = TaiwanStockEnv(
         df_dict=test_data,
         window_size=window_size,
@@ -314,6 +324,8 @@ def build_eval_env(
         enable_cash_action=enable_cash_action,
         enable_margin_short=enable_margin_short,
         max_leverage=settings.risk_limits.max_leverage,
+        enable_sl_features=enable_sl_features,
+        sl_features_by_ticker=sl_feature_arrays,
     )
     
     return test_env, test_data
