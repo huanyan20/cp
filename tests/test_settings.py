@@ -66,12 +66,12 @@ class TrainingTierTests(unittest.TestCase):
 
     def test_resolve_tier_maps_timesteps_and_truncates_seeds(self):
         base_seeds = [42, 43, 44]
-        self.assertEqual(settings.resolve_tier("smoke", base_seeds), (300_000, [42]))
-        self.assertEqual(settings.resolve_tier("candidate", base_seeds), (300_000, [42, 43]))
-        self.assertEqual(settings.resolve_tier("promotion", base_seeds), (300_000, [42, 43, 44]))
+        self.assertEqual(settings.resolve_tier("smoke", base_seeds), (500_000, [42]))
+        self.assertEqual(settings.resolve_tier("candidate", base_seeds), (500_000, [42, 43]))
+        self.assertEqual(settings.resolve_tier("promotion", base_seeds), (500_000, [42, 43, 44]))
 
     def test_resolve_tier_is_case_insensitive(self):
-        self.assertEqual(settings.resolve_tier("PROMOTION", [42, 43, 44])[0], 300_000)
+        self.assertEqual(settings.resolve_tier("PROMOTION", [42, 43, 44])[0], 500_000)
 
     def test_resolve_tier_rejects_unknown_tier(self):
         with self.assertRaises(ValueError):

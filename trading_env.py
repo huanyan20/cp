@@ -374,8 +374,6 @@ class TaiwanStockEnv(gym.Env):
             self._peak_value = float(new_peak)
             self._max_drawdown = float(new_mdd)
             self._trade_returns = new_tr.astype(np.float32)
-            # Update return history (deque must stay in Python)
-            log_r = float(np.log(max(new_pv, 1e-8) / max(self._portfolio_value, 1e-8)))
             return
 
         # Fallback path
@@ -437,8 +435,8 @@ class TaiwanStockEnv(gym.Env):
     def _compute_reward(
         self, prev_value: float, curr_value: float, trade_cost: float
     ) -> float:
-        log_r = np.log(max(curr_value, 1e-8) / max(prev_value, 1e-8))
-        self._return_history.append(log_r)
+        log_r = float(np.log(max(curr_value, 1e-8) / max(prev_value, 1e-8)))
+        self._return_history.append(log_r)  # must happen before kernel (history_len)
 
         capital_util = float(np.sum(np.abs(self._positions)))
         cash_ratio = (
