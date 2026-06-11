@@ -44,6 +44,12 @@ capital_flow_analysis/reports/*.png
 capital_flow_analysis/reports/*.json
 capital_flow_analysis/reports/*.md
 
+# Local code-intel tooling (generated)
+.understand-anything/
+
+# Research run logs (metrics JSON lives under .research/runs/)
+.research/archive/logs/
+
 # IDE / OS
 .vscode/
 .vs/

@@ -91,7 +91,7 @@ class TemporalGnnFeatureExtractor(BaseFeaturesExtractor):
         observation_space: gym.spaces.Box,
         features_dim: int = 256,
         window_size: int = 20,
-        account_features: int = 6,
+        account_features: int = 9,
     ):
         super().__init__(observation_space, features_dim)
         assert len(observation_space.shape) == 2, (

@@ -1,38 +1,26 @@
 ---
 name: cp-ppo-efficiency
 description: >-
-  P10 PPO training throughput ablation (VecEnv, n_steps, n_epochs). Use after R6
-  when optimizing PPO wall-clock without changing algorithm.
+  P10 PPO VecEnv ablation — ARCHIVED. VecEnv not merged (acceptance FAIL).
+  Do not use as active queue item under v3.
 ---
-# CP PPO Efficiency (P10)
+# CP PPO Efficiency (P10) — ARCHIVED
 
-Full spec: `docs/SAC_BUFFER_PLAN.md` §4
+**Status**: Done · **Not merged** · frozen in `cp-p10-ppo` worktree.
 
-## When
+## Result summary (2025H1 seed42)
 
-After R6 `ppo/disabled` metrics frozen; parallel with P8 code work (separate worktree).
+- A1 fps 1.20× vs A0 (need ≥1.5×) — FAIL
+- A3 wall 59% vs A0 (need ≤50%) — FAIL
+- |ΔMDD| ~14pp — FAIL
 
-## Ablation matrix (one variable at a time)
+Review: `.research/archive/reviews/P10-reviewed-by-external.md`  
+Handoff: `.research/archive/handoffs/P10.json`
 
-Fixed: `ppo`, `cash=disabled`, seed=42, 300K, period **2025H1**
+## v3 rule
 
-| Stage | Change |
-|-------|--------|
-| A0 | Baseline DummyVecEnv |
-| A1 | `SubprocVecEnv` n_envs=4 (or 2 if VRAM tight) |
-| A2 | A1 + `n_epochs=5` |
-| A3 | A2 + `n_steps=512` |
+Do **not** re-run or merge VecEnv defaults. PPO stays R6 configuration on `main`.
 
-## Acceptance
+## If human requests re-test
 
-- A1 fps ≥ 1.5× A0
-- A3 wall time ≤ 50% A0
-- OOS |ΔMDD| < 5pp vs A0
-
-## Script (R6后新增)
-
-```powershell
-.\env\Scripts\python.exe scripts\ppo_efficiency_ablation.py --period 2025H1 --seed 42
-```
-
-Worktree: `../cp-p10-ppo` branch `feat/p10-ppo-vecenv`
+Worktree: `../cp-p10-ppo` · `scripts/ppo_efficiency_ablation.py`

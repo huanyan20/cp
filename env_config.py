@@ -9,7 +9,7 @@ from typing import Any
 import trading_env
 
 # Bump manually when reward / regime logic changes intentionally (e.g. r4, r5).
-ENV_CONFIG_VERSION = "r4"
+ENV_CONFIG_VERSION = "r5.1"
 
 
 def build_env_config_snapshot(
@@ -19,7 +19,7 @@ def build_env_config_snapshot(
 ) -> dict[str, Any]:
     """Capture env + research knobs that invalidate cross-run metric comparison."""
     topk = 5
-    softmax_temp = 0.5
+    softmax_temp = 1.0
     max_leverage = 2.0
     if settings is not None:
         topk = settings.research.default_topk
@@ -38,8 +38,11 @@ def build_env_config_snapshot(
         "regime_penalty_coef": trading_env.REGIME_PENALTY_COEF,
         "topk": topk,
         "softmax_temp": softmax_temp,
+        "min_top_k_weight": trading_env.MIN_TOP_K_WEIGHT,
         "max_leverage": max_leverage,
         "use_benchmark_reward": True,
+        "num_account_features": trading_env.NUM_ACCOUNT_FEATURES,
+        "sharpe_window": trading_env.SHARPE_WINDOW,
     }
     if sl_features:
         config["sl_features"] = sl_features

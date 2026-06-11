@@ -1,7 +1,7 @@
 # Research Playbook
 
-> **狀態**：進行中 · **計畫**：[`../專案總覽.md`](../專案總覽.md)
-> **目的**：把「改 reward / env → 重訓 → 報告 → Promotion Gate」收斂成一條低成本、可比較的流程。
+> **狀態**：v3 進行中 · **路線圖**：[`RESEARCH_STRATEGY_V3.md`](RESEARCH_STRATEGY_V3.md) · **入口**：[`../專案總覽.md`](../專案總覽.md)  
+> **目的**：r5 改動 → O2 分層重訓（smoke/candidate/promotion）→ Gate。R7/R7b/R8/R9 已砍。
 
 ---
 

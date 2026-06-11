@@ -2,6 +2,9 @@
 
 手動執行的診斷、分析與一次性驗證工具（非核心流程、非自動化測試套件）。
 
+> **研究排程**（2026-06-11 v3）：活躍路線圖見 [`docs/RESEARCH_STRATEGY_V3.md`](../docs/RESEARCH_STRATEGY_V3.md)。  
+> `sac_gradient_ablation.py`（R7b）已刪。分層 WF 用 repo 根目錄 `walk_forward.py`；編排乾跑用 `research_orchestrator.py`。
+
 > **重要**：一律從 **repo 根目錄** 執行，例如 `python scripts/shap_analysis.py`。
 > 這些腳本以 `Path(__file__).resolve().parent.parent` 推導 repo 根並注入 `sys.path`，
 > 同時以 cwd 相對路徑讀取 `results_dir/`、`capital_flow_analysis/data/` 等產物。

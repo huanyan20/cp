@@ -22,7 +22,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(app_settings.research.walk_forward_timesteps, 300_000)
         self.assertEqual(app_settings.research.walk_forward_cash_mode, "enabled")
         self.assertEqual(app_settings.research.default_topk, 5)
-        self.assertEqual(app_settings.research.default_softmax_temp, 0.5)
+        self.assertEqual(app_settings.research.default_softmax_temp, 1.0)
 
     def test_environment_overrides_settings(self):
         env = {

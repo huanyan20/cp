@@ -40,7 +40,7 @@ class DynamicCashEnvTests(unittest.TestCase):
     def test_legacy_shape_is_unchanged(self):
         env = make_env(enable_cash_action=False)
         self.assertEqual(env.action_space.shape, (3,))
-        self.assertEqual(env.observation_space.shape, (3, 5 * 3 + 6))
+        self.assertEqual(env.observation_space.shape, (3, 5 * 3 + 9))
 
     def test_cash_action_adds_one_dimension(self):
         env = make_env(enable_cash_action=True)

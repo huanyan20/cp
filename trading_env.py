@@ -14,14 +14,27 @@ BORROW_RATE_DAILY = 0.015 / 252
 LAMBDA_COST = 5.0           # Strongly penalize transaction friction
 LAMBDA_TURNOVER = 1.0       # Penalize portfolio churn
 LAMBDA_CASH = 0.0
-LAMBDA_DRAWDOWN = 0.8       # R4: 0.3 → 0.8 to force active drawdown management
-LAMBDA_CASH_DEFENSIVE = 0.2 # R4: bonus for holding cash during drawdown periods
-REWARD_REF_DD = 0.03        # drawdown penalty buffer (R4: 5% → 3%)
-REGIME_DD_THRESHOLD = 0.08  # regime penalty starts above this drawdown (R4: 10% → 8%)
-REGIME_PENALTY_COEF = 1.0   # stock exposure penalty during drawdown (R4: 0.5 → 1.0)
+LAMBDA_DRAWDOWN = 1.2       # R5: 0.8 → 1.2 — stronger drawdown signal (M1b)
+LAMBDA_CASH_DEFENSIVE = 0.35  # R5: 0.2 → 0.35 — reward defensive cash earlier
+REWARD_REF_DD = 0.02        # R5: 3% → 2% buffer — penalty kicks in sooner
+REGIME_DD_THRESHOLD = 0.06  # R5: 8% → 6% — regime exposure penalty earlier
+REGIME_PENALTY_COEF = 1.5   # R5: 1.0 → 1.5 — heavier stock exposure during DD
 SHARPE_WINDOW = 20
+MIN_TOP_K_WEIGHT = 0.05  # M1c: floor per active top-k stock before re-normalize
 _BENCHMARK_TOPK = 3
 _BENCHMARK_LOOKBACK = 20
+
+# Account feature layout (per stock; portfolio-level tail features broadcast).
+NUM_ACCOUNT_FEATURES = 9
+IDX_CASH = 0
+IDX_TOTAL_RETURN = 1
+IDX_MAX_DRAWDOWN = 2
+IDX_POSITION = 3
+IDX_TRADE_RETURN = 4
+IDX_HOLDING_PERIOD = 5
+IDX_ROLLING_VOL = 6
+IDX_ROLLING_SORTINO = 7
+IDX_CURRENT_DRAWDOWN = 8
 
 
 def _softsign(x: float) -> float:
@@ -44,7 +57,7 @@ class TaiwanStockEnv(gym.Env):
         window_size: int = 20,
         initial_balance: float = 1_000_000.0,
         topk: int = 5,
-        softmax_temp: float = 0.5,
+        softmax_temp: float = 1.0,
         use_benchmark_reward: bool = True,
         enable_cash_action: bool = False,
         enable_margin_short: bool = False,
@@ -88,7 +101,7 @@ class TaiwanStockEnv(gym.Env):
             axis=1,
         )
 
-        self._NUM_ACCOUNT_FEATURES = 6
+        self._NUM_ACCOUNT_FEATURES = NUM_ACCOUNT_FEATURES
         self.enable_sl_features = bool(enable_sl_features)
         self._sl_features_by_ticker = sl_features_by_ticker or {}
         self._NUM_SL_FEATURES = 3 if self.enable_sl_features else 0
@@ -273,6 +286,9 @@ class TaiwanStockEnv(gym.Env):
             mask = np.zeros(self.num_stocks, dtype=np.float32)
             mask[topk_indices] = 1.0
             stock_weights = stock_weights * mask
+            stock_weights[topk_indices] = np.maximum(
+                stock_weights[topk_indices], MIN_TOP_K_WEIGHT
+            )
 
         total = float(np.sum(stock_weights) + cash_weight)
         if total > 1e-6:
@@ -345,6 +361,33 @@ class TaiwanStockEnv(gym.Env):
         dd = (self._peak_value - self._portfolio_value) / max(self._peak_value, 1e-8)
         self._max_drawdown = max(self._max_drawdown, dd)
 
+    def _current_drawdown(self) -> float:
+        return (self._peak_value - self._portfolio_value) / max(
+            self._peak_value, 1e-8
+        )
+
+    def _compute_pomdp_features(self) -> tuple[float, float, float]:
+        """Rolling vol / Sortino proxy / current DD — shared by obs and reward."""
+        current_dd = float(np.clip(self._current_drawdown(), 0.0, 1.0))
+        n = len(self._return_history)
+        if n < 2:
+            return 0.0, 0.0, current_dd
+
+        arr = np.array(self._return_history, dtype=np.float64)
+        rolling_vol = float(np.clip(np.std(arr) * 100.0, 0.0, 1.0))
+        if n < 5:
+            return rolling_vol, 0.0, current_dd
+
+        mean_r = float(np.mean(arr))
+        neg_returns = arr[arr < 0]
+        downside_std = (
+            float(np.std(neg_returns) + 1e-8)
+            if len(neg_returns) >= 2
+            else float(np.std(arr) + 1e-8)
+        )
+        sortino_proxy = float(_softsign(mean_r / downside_std))
+        return rolling_vol, sortino_proxy, current_dd
+
     def _compute_reward(
         self, prev_value: float, curr_value: float, trade_cost: float
     ) -> float:
@@ -353,17 +396,10 @@ class TaiwanStockEnv(gym.Env):
 
         capital_util = np.sum(np.abs(self._positions))
         return_component = _softsign(log_r * 100)
+        _, sortino_proxy, _ = self._compute_pomdp_features()
 
         if len(self._return_history) >= 5:
-            arr = np.array(self._return_history)
-            mean_r = np.mean(arr)
-            neg_returns = arr[arr < 0]
-            downside_std = (
-                np.std(neg_returns) + 1e-8
-                if len(neg_returns) >= 2
-                else np.std(arr) + 1e-8
-            )
-            sortino_component = _softsign(mean_r / downside_std) * capital_util
+            sortino_component = sortino_proxy * capital_util
 
             if self.use_benchmark_reward:
                 benchmark_component = _softsign((log_r - self._benchmark_log_r) * 100)
@@ -390,9 +426,7 @@ class TaiwanStockEnv(gym.Env):
         )
         cash_p = LAMBDA_CASH * cash_ratio
 
-        raw_dd = (self._peak_value - self._portfolio_value) / max(
-            self._peak_value, 1e-8
-        )
+        raw_dd = self._current_drawdown()
         drawdown_p = LAMBDA_DRAWDOWN * max(0.0, raw_dd - REWARD_REF_DD)
 
         regime_penalty = 0.0
@@ -430,6 +464,7 @@ class TaiwanStockEnv(gym.Env):
             self.initial_balance, 1e-8
         )
         dd_norm = float(np.clip(self._max_drawdown, 0.0, 1.0))
+        rolling_vol, sortino_proxy, current_dd = self._compute_pomdp_features()
 
         obs = np.empty((self.num_stocks, self._obs_dim_per_stock), dtype=np.float32)
         market_dim = self.window_size * self.num_market_features
@@ -447,6 +482,9 @@ class TaiwanStockEnv(gym.Env):
         account[:, 3] = self._positions
         account[:, 4] = np.clip(self._trade_returns, -1.0, 1.0)
         account[:, 5] = np.clip(self._holding_periods / 100.0, 0.0, 1.0)
+        account[:, IDX_ROLLING_VOL] = rolling_vol
+        account[:, IDX_ROLLING_SORTINO] = sortino_proxy
+        account[:, IDX_CURRENT_DRAWDOWN] = current_dd
 
         if self.enable_sl_features:
             obs[:, market_dim + self._NUM_ACCOUNT_FEATURES :] = self._sl_data[

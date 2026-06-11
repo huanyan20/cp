@@ -23,7 +23,8 @@ from settings import (  # noqa: E402
     resolve_torch_device,
 )
 from stock_universe import MACRO_TICKERS_RL, TICKERS_TECH_EXPANDED  # noqa: E402
-from trading_env import TaiwanStockEnv  # noqa: E402
+from trading_env import NUM_ACCOUNT_FEATURES, TaiwanStockEnv  # noqa: E402
+from indexed_replay_buffer import IndexedReplayBuffer, estimated_bytes_per_transition  # noqa: E402
 
 SETTINGS = load_settings()
 TRAIN_START = SETTINGS.research.train_start
@@ -75,7 +76,9 @@ def build_policy_kwargs(
     extractor_class = TemporalGnnFeatureExtractor if temporal_extractor else GnnFeatureExtractor
     extractor_kwargs = dict(features_dim=features_dim)
     if temporal_extractor:
-        extractor_kwargs.update(dict(window_size=window_size, account_features=6))
+        extractor_kwargs.update(
+            dict(window_size=window_size, account_features=NUM_ACCOUNT_FEATURES)
+        )
     return dict(
         features_extractor_class=extractor_class,
         features_extractor_kwargs=extractor_kwargs,
@@ -124,20 +127,21 @@ def build_model(
         return model, callback
 
     if algo == "sac":
-        # 自動調整 buffer_size，避免 OOM (Out of Memory)
-        # optimize_memory_usage=True 時 SB3 的 obs 與 next_obs 共用同一個陣列，
-        # 每筆 transition 實際只佔一份 float32 obs（舊版公式 *2 多估了一倍）。
-        # 預設上限 4GB（16GB RAM 機器，約 11K transitions ≈ 10 個 episode）。
-        # SAC_BUFFER_RAM_GB 可覆寫：R6 續跑用 1（重現舊公式的 2,805，保 seed 一致）。
+        # IndexedReplayBuffer stores t + account block (~2.4KB/transition), not full obs.
+        # Default RAM cap 4GB → buffer can reach full timesteps (300K).
+        # SAC_BUFFER_RAM_GB=1 only for R6 reproduction (legacy 2,805 cap); do not use for R7+.
         ram_gb = float(os.environ.get("SAC_BUFFER_RAM_GB", "4"))
-        obs_size = np.prod(env.observation_space.shape)
-        bytes_per_transition = obs_size * 4
-        max_buffer_by_ram = int((ram_gb * 1024**3) / bytes_per_transition)
 
-        # 也不要超過訓練的總 timesteps
+        bytes_per_transition = estimated_bytes_per_transition(env, optimize_memory=True, storage_dtype=np.float16)
+
+        max_buffer_by_ram = int((ram_gb * 1024**3) / bytes_per_transition)
         buffer_size = min(timesteps, max_buffer_by_ram)
 
-        print(f"[SAC] 自動調整 buffer_size = {buffer_size:,} (預估佔用記憶體: {buffer_size * bytes_per_transition / 1024**3:.1f} GB)")
+        print(
+            f"[SAC] IndexedReplayBuffer buffer_size = {buffer_size:,} "
+            f"(~{bytes_per_transition} B/transition, float16 account, optimize_memory=True, "
+            f"est. RAM {buffer_size * bytes_per_transition / 1024**3:.2f} GB)"
+        )
 
         model = SAC(
             "MlpPolicy",
@@ -155,7 +159,12 @@ def build_model(
             ent_coef="auto",
             optimize_memory_usage=True,
             policy_kwargs=policy_kwargs,
-            replay_buffer_kwargs=dict(handle_timeout_termination=False),
+            replay_buffer_class=IndexedReplayBuffer,
+            replay_buffer_kwargs=dict(
+                handle_timeout_termination=False,
+                env=env,
+                storage_dtype=np.float16,
+            ),
         )
         return model, None
 

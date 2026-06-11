@@ -1,219 +1,157 @@
-# CP 研究迴圈（Research Loop）— R6 後多 Agent 自動評估
+# CP 研究迴圈（Research Loop）— v3 RL Rebuild
 
-> **狀態**：腳手架就緒（2026-06-11）· **啟用條件**：R6 promotion 跑完（PPO 3 seeds metrics 齊）
-> **相關**：[`SAC_BUFFER_PLAN.md`](SAC_BUFFER_PLAN.md) · [`RESEARCH_PLAYBOOK.md`](RESEARCH_PLAYBOOK.md) · [`.research/research_state.json`](../.research/research_state.json)
+> **狀態**：v3.1（2026-06-11）· **phase**=`rl_rebuild_v3`  
+> **活躍計畫**：[`RESEARCH_STRATEGY_V3.md`](RESEARCH_STRATEGY_V3.md)  
+> **相關**：[`RESEARCH_PLAYBOOK.md`](RESEARCH_PLAYBOOK.md) · [`.research/research_state.json`](../.research/research_state.json)
 
 ---
 
 ## 0. 核心概念
 
-**工作從「每次手動 prompt」變成「寫迴圈」**：你只定義遞迴目標與終止條件，系統每輪讀磁碟狀態 → 分類 → 派工 → 寫回 → 判定是否繼續。
+**北極星**：SAC enabled · 3 seeds · **worst-case MDD ≤ 35%**（Promotion Gate）
 
 ```text
-目標：RL 研究線取得可解釋的 Gate 進展（或證明下一桿子無效）
-硬終止：Promotion Gate APPROVED（8/8）
-軟終止：P8→R7→（R8/R9 視結果）排程完成 + decisions/ 有最終 memo
-每輪禁止：改 walk_forward 進行中進程 · 中途改 R6 buffer · 一輪動多個變因
+目標：r5 結構改動（obs/reward/集中度）→ O2 分層 WF → Gate retry
+硬終止：Gate APPROVED（8/8）或 RL 路徑停損（promotion MDD > 38% → SL hybrid）
+已結束：P8/P10 implement · cross_review · R7/R7b/R8/R9 · SAC-R active line
+每輪禁止：恢復已砍 SAC 工程 · 一輪多變因 · 未確認跑 300K WF
 ```
 
 ---
 
-## 1. Automation（按時觸發、自行分類）
+## 1. Automation
 
-### 1.1 兩層觸發
+### 1.1 觸發
 
 | 層級 | 機制 | 用途 |
 |------|------|------|
-| **事件驅動** | `results_dir/metrics_*.json` 變更、`experiment_report.md` 更新、pytest 失敗 | R6 完成、R7 出結果 |
-| **心跳驅動** | Cursor `/loop dynamic` 或 Automations cron | 長訓練監看、夜間 orchestrator |
+| **事件驅動** | M2 metrics 產出、`experiment_report.md` 更新 | smoke/candidate/promotion 後 triage |
+| **心跳驅動** | Cursor `/loop` 或 Automations | 監看 `train_slot`、orchestrator 乾跑 |
 
-分類**不靠 agent 猜**：`scripts/research_orchestrator.py` 讀 `.research/research_state.json` 的 `queue[]`（`id` / `status` / `blocked_by`）。
+分類來源：`.research/research_state.json` → `queue[]`
 
-### 1.2 Orchestrator 一輪（R6 後啟用）
-
-```powershell
-# 乾跑：只印下一任務與建議 prompt（預設）
-.\env\Scripts\python.exe scripts\research_orchestrator.py
-
-# 執行允許的動作（pytest、experiment_report、開 worktree 指令等）
-.\env\Scripts\python.exe scripts\research_orchestrator.py --execute
-```
-
-**嚴禁自動 `--execute` 跑 300K walk_forward**（GPU 單卡、需人確認）。訓練仍由人啟動或專用 Automation 模板觸發。
-
-### 1.3 Cursor Automations（可選）
-
-R6 完成後可建 Automation：
-
-- **觸發**：`results_dir/metrics_ppo_disabled_wf_seed44.json` 出現（或每日定時）
-- **動作**：跑 `experiment_report.py` → `research_orchestrator.py` → 若有 `pending` 則開 Agent 任務（P8 worktree）
-
-Automations 的 MCP 僅能 prefilled **dashboard 已連線**的 server（見 `automate` skill）；本專案迴圈核心用 **Shell + gh**，不依賴 browser MCP。
-
-**現階段**：`phase=post_r6` — P8 由 **Antigravity IDE**、P10 由 **Cursor** 平行 implement。
-
----
-
-## 2b. 跨工具雙 Agent（Cursor + Antigravity IDE）
-
-**不假設**第二個 agent 是 Cursor。通訊只靠 **Git + `.research/` 檔案**。
-
-| 支柱 | 跨工具調整 |
-|------|------------|
-| **Automation** | orchestrator 讀 `handoffs/*.json` 解鎖 `cross_review`；外部工具無 orchestrator |
-| **Worktree** | external → `../cp-p8-buffer`；Cursor → `../cp-p10-ppo` |
-| **Skills** | Cursor 讀 `.cursor/skills/`；Antigravity 讀 worktree `AGENTS.md` + `GEMINI.md` |
-| **MCP** | 外部工具自備（Cursor 仍 Shell + gh） |
-| **外部記憶** | `handoffs/` + `reviews/` 為共用 mailbox |
-
-```text
-implement (平行)
-  external: P8 on feat/p8-indexed-replay-buffer
-  cursor:   P10 on feat/p10-ppo-vecenv
-       ↓ handoffs/P8.json + P10.json
-cross_review (互換)
-  external → reviews/P10-reviewed-by-external.md
-  cursor   → reviews/P8-reviewed-by-cursor.md
-       ↓ 人類 merge
-integrate → R7
-```
-
-**Antigravity 設定**：見 [`.research/EXTERNAL_AGENT_BRIEF.md`](../.research/EXTERNAL_AGENT_BRIEF.md) · 規則模板 [`.research/antigravity/AGENTS.md`](../.research/antigravity/AGENTS.md)
-
-**Cursor agent**：implement P10 後讀 `.cursor/skills/cp-handoff/SKILL.md` 審查 P8。
-
----
-
-## 2. Worktree（多 Agent 平行、互不干擾）
-
-| Worktree 目錄 | 分支 | Agent 任務 | 互斥 |
-|---------------|------|------------|------|
-| `../cp-p8-buffer` | `feat/p8-indexed-replay-buffer` | P8 IndexedReplayBuffer | `train_portfolio.py` |
-| `../cp-p10-ppo` | `feat/p10-ppo-vecenv` | P10 PPO 效率 ablation | 同上 PPO 區塊 |
-| `../cp-docs` | `docs/research-loop` | 報告、ledger、decision memo | 只讀 metrics |
-
-規則：
-
-1. **一 worktree = 一 agent = 一分支**；合併前 `pytest` + `ruff`。
-2. **GPU 訓練序列化**：`research_state.json` 的 `train_slot` 同一時間只有一個 `busy`。
-3. P8 與 P10 **可平行寫碼**；R7 訓練須等 P8 merge。
-
-建立 worktree 範例（orchestrator 乾跑也會印出）：
+### 1.2 Orchestrator
 
 ```powershell
-git worktree add ..\cp-p8-buffer -b feat/p8-indexed-replay-buffer
-git worktree add ..\cp-p10-ppo -b feat/p10-ppo-vecenv
+.\env\Scripts\python.exe scripts\research_orchestrator.py          # 乾跑
+.\env\Scripts\python.exe scripts\research_orchestrator.py --execute  # 安全步驟 only
 ```
 
----
+**禁止**自動 `--execute` 跑 300K `walk_forward`。
 
-## 3. Skills（專案知識外置）
+### 1.3 現階段
 
-Agent **每輪必讀**（專案級，`.cursor/skills/`）：
-
-| Skill | 用途 |
-|-------|------|
-| `cp-research-loop` | 讀 state、排程、禁止項、orchestrator 協議 |
-| `cp-promotion-gate` | Gate 8 項、worst-case MDD、current-env-only |
-| `cp-sac-buffer` | P8/R7 實作與驗收（摘 `SAC_BUFFER_PLAN.md`） |
-| `cp-ppo-efficiency` | P10 ablation A0–A3（摘 `SAC_BUFFER_PLAN.md` §4） |
-| `cp-handoff` | Cursor ↔ 外部工具 handoff / cross-review |
-
-人讀：`專案總覽.md` + `docs/*`；**外部 agent** 讀：`.research/EXTERNAL_AGENT_BRIEF.md`；Cursor 讀：**skill + `.research/`**。
+`phase=rl_rebuild_v3` · `train_slot=free` · 下一步 **M1a**（code-only，無 WF）
 
 ---
 
-## 4. Plugins / Connectors（MCP）
+## 2. 跨工具 Agent（v3 審核）
 
-本迴圈**最小連接集**：
+P8/P10 implement **已完成**。外部 agent 現任務：
 
-| 連接 | 用途 |
+| 任務 | 文件 |
 |------|------|
-| **Shell** | `walk_forward`、`pytest`、`experiment_report`、orchestrator |
-| **Git / `gh`** | PR、CI、issue（研究決策留痕） |
-| **Filesystem** | `.research/`、`results_dir/` |
+| v3 戰略 + 文件一致性審核 | [`.research/reviews/V3-STRATEGY-REVIEW-BRIEF.md`](../.research/reviews/V3-STRATEGY-REVIEW-BRIEF.md) |
+| 外部 agent 設定 | [`.research/EXTERNAL_AGENT_BRIEF.md`](../.research/EXTERNAL_AGENT_BRIEF.md) |
 
-**暫不納入**：browser、Slack（除非你要手機推播）。研究迴圈 = 本地 metrics + git，不是外部 SaaS。
+輸出：`.research/reviews/V3-reviewed-by-<agent>.md`
 
 ---
 
-## 5. 外部記憶（磁碟，非 context）
+## 3. Worktree
+
+| Worktree | 分支 | 狀態 |
+|----------|------|------|
+| `cp`（main） | `main` | **活躍** — M1/M2 |
+| `cp-p8-buffer` | `feat/p8-indexed-replay-buffer` | merged |
+| `cp-p10-ppo` | `feat/p10-ppo-vecenv` | 封存 |
+| `cp-sac-r` | `feat/sac-r-recurrent` | 封存 |
+
+規則：v3 僅在 **main** 開發；`train_slot` 同時只有一個 `busy`。
+
+---
+
+## 4. Skills
+
+| Skill | v3 用途 |
+|-------|---------|
+| `cp-research-loop` | 讀 state、M1/M2 queue |
+| `cp-promotion-gate` | M2-promotion 後 Gate triage |
+| `cp-sac-buffer` | P8 基礎設施參考 only（勿恢復 R7b/R8/R9） |
+| `cp-ppo-efficiency` | 封存（P10 不合併） |
+| `cp-handoff` | 歷史 P8/P10 協議 |
+
+---
+
+## 5. 外部記憶
 
 ```text
 .research/
-  research_state.json      # phase、gate、queue、agents、train_slot
-  experiment_ledger.jsonl  # 每輪 append-only 審計
-  EXTERNAL_AGENT_BRIEF.md  # Antigravity IDE 設定（P8）
-  antigravity/AGENTS.md    # 複製到 cp-p8-buffer 根目錄
-  antigravity/GEMINI.md    # Antigravity 專用規則
-  handoffs/                # implement 完成 JSON（跨工具 mailbox）
-  reviews/                 # cross_review markdown
-  decisions/               # 人可讀 5 行決策 memo
-  baselines/               # R6 freeze 後複製 metrics（R7 對照）
+  research_state.json
+  experiment_ledger.jsonl
+  reviews/V3-STRATEGY-REVIEW-BRIEF.md   ← 外部審核入口
+  handoffs/          # 歷史 P8/P10/SAC-R
+  baselines/         # R6 凍結
+  decisions/
 ```
 
-**每輪 agent 協議**：
+**每輪協議**：
 
-1. `Read research_state.json`
-2. 若 `phase == r6_running` 且 walk_forward 進程存在 → **只監看，不派新訓練**
-3. 取 `queue` 中第一個 `status=pending` 且 `blocked_by` 全 `done`
-4. 執行**單一**任務；訓練類寫入 `train_slot`
-5. `Append experiment_ledger.jsonl` + 更新 state + 可選 `decisions/*.md`
-6. **禁止**把整份 metrics JSON 塞進 prompt——只摘 5 個數 + 檔案路徑
+1. Read `research_state.json`
+2. 取第一個 `pending` 且 `blocked_by` 全 satisfied
+3. 單一任務；訓練寫入 `train_slot`
+4. Append ledger；metrics 摘要 ≤ 5 數字
 
 ---
 
-## 6. 狀態機與排程（R6 後預填 queue）
+## 6. Queue（v3）
 
 ```mermaid
 stateDiagram-v2
-    [*] --> R6Running
-    R6Running --> Triage: PPO metrics 齊
-    Triage --> P8: gate BLOCKED
-    P8 --> R7: P8 tests pass
-    R7 --> Decide: R7 metrics
-    Decide --> R8: MDD 仍超標
-    Decide --> GateRetry: MDD 改善
-    P10 --> P10Done: ablation pass
-    R8 --> Triage
+    [*] --> M1a
+    M1a --> M1b: obs tests pass
+    M1b --> M1c: optional
+    M1b --> M2smoke: r5 ready
+    M2smoke --> M2candidate: 2025H1 MDD < r4
+    M2candidate --> M2promotion: worst trend OK
+    M2promotion --> GateRetry: MDD <= 35%
+    M2promotion --> PauseRL: MDD > 38%
     GateRetry --> [*]
+    PauseRL --> [*]
 ```
 
-| ID | 說明 | blocked_by |
-|----|------|------------|
-| `freeze_r6` | 複製 metrics → `baselines/`，更新 gate | R6 完成 |
-| `P8` | IndexedReplayBuffer | `freeze_r6` | **external** |
-| `P10` | PPO VecEnv ablation | `freeze_r6` | **cursor** |
-| `cross_review` | 互換審查 | `P8` + `P10` handoffs | both |
-| `R7` | SAC 重訓 | `P8` + `cross_review` | cursor |
-| `R8` | SL-only obs 實驗 | `R7`（且 R7 MDD 仍 >35%） |
-| `R9` | PER | `R7`（且 R7 MDD 仍 >35%） |
+| ID | 說明 | 狀態 |
+|----|------|------|
+| P8 | IndexedReplayBuffer | done |
+| R7/R7b/R8/R9 | SAC 工程實驗 | **cancelled** |
+| SAC-R | Recurrent line | **frozen** |
+| M1a | obs POMDP | pending |
+| M1b | reward r5 | pending |
+| M1c | concentration guard | optional |
+| M2-smoke / candidate / promotion | O2 tier WF | blocked |
 
 ---
 
-## 7. Orchestrator Prompt 模板（貼給 Claude / Cursor Agent）
+## 7. Orchestrator Prompt 模板
 
 ```text
 你是 CP 研究 orchestrator。遵守 .cursor/skills/cp-research-loop/SKILL.md。
 
 1. 讀 .research/research_state.json 與 experiment_ledger.jsonl 最後 5 行
-2. 若 phase=r6_running：只報告 walk_forward 進度，結束
-3. 若 queue 空：跑 experiment_report.py，更新 gate，重填 queue
-4. 取最高優先 pending（freeze_r6 → P8 ∥ P10 → R7 → R8/R9）
-5. 寫碼任務在對應 worktree；跑 pytest；不跑 300K 除非 state.train_slot=free 且人類已確認
-6. append ledger、更新 state、寫 decisions/ 若做分支決策
-7. gate=APPROVED 或 queue 全 done → 終止並摘要
+2. 活躍計畫：docs/RESEARCH_STRATEGY_V3.md（勿恢復 R7b/R8/R9/SAC-R）
+3. 取 queue 第一個 pending 任務（應為 M1a）
+4. M1 = code + pytest；M2 = walk_forward tier（需人確認 train_slot）
+5. append ledger、更新 state
+6. Gate APPROVED 或 RL 停損 → 終止並摘要
 ```
 
 ---
 
 ## 8. 啟用檢查清單
 
-- [x] R6 metrics + 24 WF 模型齊
-- [x] `experiment_report.py` → Gate BLOCKED（MDD 44.41%）
-- [x] `baselines/` 凍結 · `phase=post_r6`
-- [x] P8 handoff（Antigravity · `handoffs/P8.json`）
-- [ ] P10 完整 ablation + `handoffs/P10.json`
-- [ ] cross_review memos → merge → R7
-
-**現階段**：P10 收尾 → cross_review → R7（需人確認 300K）。
+- [x] R6 metrics 凍結 · Gate BLOCKED（MDD 44.41%）
+- [x] P8 merged · P10 ablation · cross_review
+- [x] v3 戰略文件 · research_state v4
+- [x] R7/R7b/R8/R9 已砍 · SAC-R frozen
+- [ ] v3 外部審核 → `V3-reviewed-by-*.md`
+- [ ] M1a → M1b → M2-smoke

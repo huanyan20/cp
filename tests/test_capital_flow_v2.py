@@ -161,17 +161,17 @@ class CapitalFlowV2Tests(unittest.TestCase):
         obs_space = __import__("gymnasium").spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(3, 5 * 4 + 6),
+            shape=(3, 5 * 4 + 9),
             dtype=np.float32,
         )
-        obs = torch.randn(2, 3, 26)
+        obs = torch.randn(2, 3, 29)
 
         gnn = GnnFeatureExtractor(obs_space, features_dim=32)
         temporal = TemporalGnnFeatureExtractor(
             obs_space,
             features_dim=32,
             window_size=5,
-            account_features=6,
+            account_features=9,
         )
         self.assertEqual(tuple(gnn(obs).shape), (2, 32))
         self.assertEqual(tuple(temporal(obs).shape), (2, 32))

@@ -1,0 +1,77 @@
+{
+  "task_id": "SAC-R",
+  "phase": "frozen",
+  "status": "frozen",
+  "agent": "review",
+  "tool": "any",
+  "frozen_at": "2026-06-11",
+  "frozen_reason": "v3 RL rebuild — SAC-R no MDD leverage in active plan",
+  "branch": "feat/sac-r-recurrent",
+  "worktree": "C:\\Users\\ggini\\Desktop\\cp-sac-r",
+  "commit": "3145a8f4776fb6a4c92841f8aa9d0226dd5ad91f",
+  "note": "Uncommitted R-S0–R-S2 work on worktree; commit before merge",
+  "research_line": "sac_r",
+  "completed_phases": ["R-S0", "R-S1", "R-S2"],
+  "next_phase_if_unfrozen": "R-S2b",
+  "next_phase": null,
+  "files_touched": [
+    "cp-sac-r/trading_env.py",
+    "cp-sac-r/sac_r/__init__.py",
+    "cp-sac-r/sac_r/daily_sequence_buffer.py",
+    "cp-sac-r/sac_r/lstm_encoder.py",
+    "cp-sac-r/tests/test_obs_mode_daily.py",
+    "cp-sac-r/tests/test_daily_sequence_buffer.py",
+    "cp-sac-r/scripts/sac_r_spike.py",
+    "cp-sac-r/scripts/sac_r_rs2_smoke.py"
+  ],
+  "artifacts": {
+    "plan": "docs/SAC_BUFFER_PLAN.md",
+    "rs0_decision": ".research/decisions/sac-r-spike.md",
+    "rs0_spike": "results_dir/sac_r_spike.json",
+    "rs2_smoke": "results_dir/sac_r_rs2_smoke.json",
+    "review_brief": ".research/reviews/SAC-R-PLAN-REVIEW-BRIEF.md"
+  },
+  "pytest": "pass",
+  "commands_run": [
+    "cd C:\\Users\\ggini\\Desktop\\cp-sac-r",
+    "..\\cp\\env\\Scripts\\python.exe -m pytest tests/test_daily_sequence_buffer.py tests/test_obs_mode_daily.py -q",
+    "..\\cp\\env\\Scripts\\python.exe scripts/sac_r_rs2_smoke.py"
+  ],
+  "smoke_summary": {
+    "sequence_buffer": {
+      "fill_timesteps": 500,
+      "sample_ms": 0.92,
+      "lstm_forward_ok": true,
+      "sb3_single_sample_ok": true
+    },
+    "recurrent_ppo_daily": {
+      "timesteps": 500,
+      "fps": 84.6,
+      "note": "proxy until custom LSTM-SAC (R-S2b)"
+    }
+  },
+  "summary": "R-S2 完成 DailySequenceReplayBuffer（daily obs 索引 + 同 episode 序列抽樣）與 DailySequenceLstmEncoder smoke；RecurrentPPO on daily flat obs 作為 R-S2b 前工程參考。尚未實作 LSTM-SAC 訓練迴圈。",
+  "open_questions": [
+    "R-S2b：自研 LSTM-SAC（critic Q(s,a,h) + actor π(a|s,h)）還是先 RecurrentPPO baseline 再遷移？",
+    "Sequence buffer burn-in：episode 開頭 t < window_size 的 market row 是否需 mask？",
+    "sample_sequences 在 buffer 未滿時 rejection sampling 效率 — 需否 pre-index episode spans？",
+    "R-S3 WF 基線：是否與 sac_classic 共用 walk_forward.py 或 sac_r/train.py 獨立？",
+    "cp-sac-r worktree 落後 main 的 IndexedReplayBuffer — 合併策略與 cherry-pick 範圍？"
+  ],
+  "acceptance_r_s2": [
+    "DailySequenceReplayBuffer 僅接受 obs_mode=daily",
+    "sample() SB3-compatible；sample_sequences 不跨 episode done",
+    "pytest test_daily_sequence_buffer + test_obs_mode_daily 全過",
+    "sac_r_rs2_smoke.json lstm_forward_ok && sb3_single_sample_ok",
+    "未修改 main train_portfolio.py（Line A 隔離）"
+  ],
+  "not_in_scope_r_s2": [
+    "Full LSTM-SAC training loop (R-S2b)",
+    "Walk-forward baseline (R-S3)",
+    "Merge to main",
+    "PER / prioritized sequence sampling"
+  ],
+  "ready_for_cross_review": false,
+  "ready_for_plan_review": false,
+  "superseded_by": "docs/RESEARCH_STRATEGY_V3.md"
+}

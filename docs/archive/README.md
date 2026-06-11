@@ -10,3 +10,4 @@
 | [`VERIFICATION_P4-P5.md`](VERIFICATION_P4-P5.md) | P4/P5 驗證報告 | 2026-06-07 |
 | [`RL_Trading_DQN_PPO_Guide.md`](RL_Trading_DQN_PPO_Guide.md) | v10 策略指南（部分過時） | 封存 |
 | [`macro_universe_separation.md`](macro_universe_separation.md) | RL/Flow macro 分離 | 已併入 ARCHITECTURE §6 |
+| [`SAC_BUFFER_PLAN_v2.md`](SAC_BUFFER_PLAN_v2.md) | SAC v2 雙線排程 + P8 規格 | v3 取代 |

@@ -101,9 +101,12 @@ class NumpyEquivalenceTests(unittest.TestCase):
                 rng.normal(size=env.action_space.shape).astype(np.float32)
             )
         market_dim = WINDOW * NUM_FEATURES
-        account = obs[:, market_dim : market_dim + 6]
+        from trading_env import NUM_ACCOUNT_FEATURES
+
+        account = obs[:, market_dim : market_dim + NUM_ACCOUNT_FEATURES]
 
         total_ret = (env._portfolio_value - env.initial_balance) / env.initial_balance
+        rolling_vol, sortino_proxy, current_dd = env._compute_pomdp_features()
         for i in range(env.num_stocks):
             expected = np.array(
                 [
@@ -113,6 +116,9 @@ class NumpyEquivalenceTests(unittest.TestCase):
                     float(env._positions[i]),
                     float(np.clip(env._trade_returns[i], -1.0, 1.0)),
                     float(np.clip(env._holding_periods[i] / 100.0, 0.0, 1.0)),
+                    rolling_vol,
+                    sortino_proxy,
+                    current_dd,
                 ],
                 dtype=np.float32,
             )

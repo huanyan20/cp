@@ -1,0 +1,49 @@
+{
+  "task_id": "P10",
+  "phase": "handoff",
+  "agent": "cursor",
+  "tool": "cursor-ide",
+  "branch": "feat/p10-ppo-vecenv",
+  "worktree": "../cp-p10-ppo",
+  "files_touched": [
+    "train_portfolio.py",
+    "settings.py",
+    "scripts/ppo_efficiency_ablation.py",
+    "tests/test_ppo_vecenv.py"
+  ],
+  "pytest": "pass",
+  "commands_run": [
+    "..\\cp\\env\\Scripts\\python.exe -m pytest tests/test_ppo_vecenv.py -q",
+    "..\\cp\\env\\Scripts\\python.exe scripts\\ppo_efficiency_ablation.py --period 2025H1 --seed 42",
+    "..\\cp\\env\\Scripts\\python.exe scripts\\ppo_efficiency_ablation.py --period 2025H1 --seed 42 --stages A3 (CPU retry after OOM)"
+  ],
+  "summary": "P10 ablation 2025H1 seed42: A1 fps_vs_a0=1.20x (FAIL), A3 wall_vs_a0=59% (FAIL), A3 fps_vs_a0=1.69x, |ΔMDD|=14.0pp (FAIL)",
+  "ablation_report": "C:\\Users\\ggini\\Desktop\\cp-p10-ppo\\results_dir\\ppo_efficiency_ablation.json",
+  "ablation_log": "C:\\Users\\ggini\\Desktop\\cp-p10-ppo\\results_dir\\ppo_efficiency_ablation.log",
+  "results": {
+    "A0": { "fps": 148.0, "wall_min": 33.8, "return_pct": 2.50, "mdd_pct": 22.67 },
+    "A1": { "fps": 177.8, "wall_min": 28.1, "return_pct": -16.29, "mdd_pct": 37.04, "fps_vs_a0": 1.20 },
+    "A2": { "fps": 245.9, "wall_min": 20.3, "return_pct": -20.82, "mdd_pct": 39.87, "fps_vs_a0": 1.66 },
+    "A3": { "fps": 250.2, "wall_min": 20.0, "return_pct": -12.62, "mdd_pct": 36.62, "fps_vs_a0": 1.69, "wall_vs_a0": 0.59 }
+  },
+  "acceptance": {
+    "a1_fps_vs_a0_min": 1.5,
+    "a3_wall_vs_a0_max": 0.5,
+    "mdd_delta_pp_max": 5.0,
+    "a1_fps_vs_a0": 1.20,
+    "a1_pass": false,
+    "a3_fps_vs_a0": 1.69,
+    "a3_wall_vs_a0": 0.59,
+    "a3_wall_pass": false,
+    "mdd_delta_pp": 13.95,
+    "mdd_pass": false,
+    "overall_pass": false
+  },
+  "cross_review": {
+    "reviewer": "antigravity",
+    "verdict": "pass_with_nits",
+    "review_path": ".research/reviews/P10-reviewed-by-external.md",
+    "integrate_vecenv_defaults": false
+  },
+  "ready_for_cross_review": true
+}

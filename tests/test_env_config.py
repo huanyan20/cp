@@ -16,6 +16,9 @@ class EnvConfigTests(unittest.TestCase):
         self.assertEqual(snap["lambda_drawdown"], trading_env.LAMBDA_DRAWDOWN)
         self.assertEqual(snap["reward_ref_dd"], trading_env.REWARD_REF_DD)
         self.assertEqual(snap["regime_dd_threshold"], trading_env.REGIME_DD_THRESHOLD)
+        self.assertEqual(snap["num_account_features"], trading_env.NUM_ACCOUNT_FEATURES)
+        self.assertEqual(snap["softmax_temp"], 1.0)
+        self.assertEqual(snap["min_top_k_weight"], trading_env.MIN_TOP_K_WEIGHT)
         self.assertEqual(len(snap["hash"]), 8)
 
     def test_hash_is_stable_for_same_config(self):

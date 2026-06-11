@@ -1,0 +1,78 @@
+{
+    "algo": "sac",
+    "seed": 42,
+    "cash_mode": "enabled",
+    "enable_cash_action": true,
+    "enable_margin_short": false,
+    "train_test_period": "Walk-Forward",
+    "timesteps": 30000,
+    "env_config_version": "r5.1",
+    "env_config_hash": "eea25956",
+    "env_config": {
+        "version": "r5.1",
+        "lambda_cost": 5.0,
+        "lambda_turnover": 1.0,
+        "lambda_cash": 0.0,
+        "lambda_drawdown": 1.2,
+        "lambda_cash_defensive": 0.35,
+        "reward_ref_dd": 0.02,
+        "regime_dd_threshold": 0.06,
+        "regime_penalty_coef": 1.5,
+        "topk": 5,
+        "softmax_temp": 1.0,
+        "min_top_k_weight": 0.05,
+        "max_leverage": 2.0,
+        "use_benchmark_reward": true,
+        "num_account_features": 9,
+        "sharpe_window": 20,
+        "hash": "eea25956"
+    },
+    "overall": {
+        "total_return": -0.12437843969517848,
+        "max_drawdown": 0.3187295292135079,
+        "sharpe": -0.5865415370409676,
+        "sortino": -0.6952685518297611,
+        "win_rate": 0.5,
+        "avg_cash_weight": 0.08475573931612237,
+        "long_exposure": 0.9152184724807739,
+        "short_exposure": 0.0,
+        "cash_weight_std": 2.6812077021608648e-05,
+        "cash_corr_next_return": -0.014116601829544594,
+        "short_corr_next_return": 0.0,
+        "turnover": 0.008056303780329855,
+        "top_holdings": {
+            "3529.TWO": 0.18304374814033508,
+            "5483.TWO": 0.18304374814033508,
+            "8299.TWO": 0.18304374814033508,
+            "6409.TW": 0.18304374814033508,
+            "2376.TW": 0.18304374814033508
+        }
+    },
+    "periods": {
+        "2025H1": {
+            "total_return": -0.12437843969517792,
+            "max_drawdown": 0.31872952921350745,
+            "sharpe": -0.5865415370409676,
+            "sortino": -0.6952685518297611,
+            "win_rate": 0.5,
+            "avg_cash_weight": 0.08475573931612237,
+            "long_exposure": 0.9152184724807739,
+            "short_exposure": 0.0,
+            "cash_weight_std": 2.6812077021608648e-05,
+            "cash_corr_next_return": -0.014116601829544594,
+            "short_corr_next_return": 0.0,
+            "turnover": 0.008056303780329855,
+            "top_holdings": {
+                "3529.TWO": 0.18304374814033508,
+                "5483.TWO": 0.18304374814033508,
+                "8299.TWO": 0.18304374814033508,
+                "6409.TW": 0.18304374814033508,
+                "2376.TW": 0.18304374814033508
+            },
+            "test_start": "2025-01-01",
+            "test_end": "2025-06-30",
+            "was_clamped": false
+        }
+    },
+    "skipped_periods": {}
+}

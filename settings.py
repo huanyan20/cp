@@ -114,7 +114,7 @@ class ResearchSettings:
     # O2: optional training tier (smoke|candidate|promotion); empty keeps explicit timesteps/seeds.
     research_tier: str = field(default_factory=lambda: _env_str("RESEARCH_TIER", ""))
     default_topk: int = field(default_factory=lambda: _env_int("RESEARCH_TOPK", 5))
-    default_softmax_temp: float = field(default_factory=lambda: _env_float("RESEARCH_SOFTMAX_TEMP", 0.5))
+    default_softmax_temp: float = field(default_factory=lambda: _env_float("RESEARCH_SOFTMAX_TEMP", 1.0))
     default_enable_cash_action: bool = field(default_factory=lambda: _env_bool("RESEARCH_ENABLE_CASH_ACTION", False))
     default_enable_margin_short: bool = field(default_factory=lambda: _env_bool("RESEARCH_ENABLE_MARGIN_SHORT", False))
     overnight_feature_path: str | None = field(

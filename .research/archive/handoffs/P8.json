@@ -11,12 +11,13 @@
     "tests/test_indexed_replay_buffer.py"
   ],
   "pytest": "pass",
+  "full_pytest": "173 passed (2026-06-11 cursor re-review)",
+  "cursor_review": ".research/reviews/P8-reviewed-by-cursor.md",
+  "cursor_verdict": "pass",
   "commands_run": [
     "..\\cp\\env\\Scripts\\python.exe -m pytest tests/test_indexed_replay_buffer.py -v"
   ],
   "summary": "實作 IndexedReplayBuffer 解決記憶體佔用問題，並已通過重建與邊界抽樣單元測試。完整 test suite 因系統 WinError 1455 (OOM) 無法執行，因此僅驗證單獨測試檔。",
-  "open_questions": [
-    "請協助在記憶體充足的環境重新驗證完整的 pytest 測試套件，確認沒有副作用。"
-  ],
+  "open_questions": [],
   "ready_for_cross_review": true
 }

@@ -1,10 +1,12 @@
 ---
 name: cp-promotion-gate
 description: >-
-  CP Promotion Gate triage after experiment_report. Use when interpreting
-  metrics JSON, deciding if R7/R8/R9 is warranted, or summarizing BLOCKED checks.
+  CP Promotion Gate triage after experiment_report. Use after M2-promotion
+  or when interpreting metrics JSON under v3 RL rebuild.
 ---
-# CP Promotion Gate
+# CP Promotion Gate (v3)
+
+Active plan: `docs/RESEARCH_STRATEGY_V3.md`
 
 ## Run report
 
@@ -12,11 +14,9 @@ description: >-
 .\env\Scripts\python.exe experiment_report.py
 ```
 
-Default: `--current-env-only` (do not mix pre-R4 metrics into Gate).
+Default: `--current-env-only`
 
-## Eight checks (see `promotion_gate.py` / `docs/RESEARCH_PLAYBOOK.md`)
-
-Key thresholds (`settings.py`, overridable via env):
+## Key thresholds
 
 | Gate | Default |
 |------|---------|
@@ -24,14 +24,19 @@ Key thresholds (`settings.py`, overridable via env):
 | Max drawdown | **worst-case ≤ 35%** |
 | Turnover | ≤ 0.10 |
 
-## R7 decision rule
+## v3 decision rule (replaces R7/R8/R9)
 
-After R6 SAC baseline (buffer=2,805):
+**R6/r4 baseline**: worst MDD **44.41%** — Drawdown FAIL only.
 
-- If **worst-case MDD still > 35%** after R4 reward → prioritize **P8→R7** (buffer hypothesis)
-- If R7 MDD drops materially toward 35% → buffer was main constraint; consider R8 for throughput
-- If R7 MDD unchanged → reward / sim-to-real / CVaR path (`docs/ALGORITHM_REVIEW.md` §四); downgrade R9 PER priority
+| After M2 tier | Action |
+|---------------|--------|
+| promotion worst MDD ≤ 35% | Gate retry · live prep |
+| candidate worst MDD 35–38% | Another M1 single-variable round |
+| smoke 2025H1 MDD ≥ r4 same seed | Revert change; do not advance tier |
+| promotion worst MDD > 38% | **Pause RL live path** → SL hybrid (M3) |
+
+**Do not** prioritize P8→R7 buffer proof or R8/R9 — cancelled in v3.
 
 ## Update state
 
-Write `gate.status`, `gate.failed_checks`, `gate.last_report_path` into `.research/research_state.json` after each report run.
+Write `gate.status`, `gate.failed_checks` into `.research/research_state.json`.
