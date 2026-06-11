@@ -109,8 +109,8 @@ def build_model(
             verbose=1,
             device=device,
             learning_rate=3e-5,
-            n_steps=2048,      # Increased from 256 for better data collection
-            batch_size=512,    # Increased from 64 to saturate CUDA cores
+            n_steps=512,       # Reduced from 2048: prevents System RAM OOM with 6 workers
+            batch_size=128,    # Reduced from 512 due to PPO RolloutBuffer RAM bloat
             n_epochs=10,
             gamma=0.99,
             gae_lambda=0.95,

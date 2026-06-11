@@ -23,9 +23,9 @@
 
 | 參數 | 原來 | 現在 |
 |------|------|------|
-| PPO `n_steps` | 256 | 2048 |
-| PPO `batch_size` | 64 | 512 |
-| SAC `batch_size` | 256 | 1024 |
+| PPO `n_steps` | 256 | 512 (為避免 RAM OOM 而下調) |
+| PPO `batch_size` | 64 | 128 |
+| SAC `batch_size` | 256 | 1024 (有特製 Buffer 故無影響) |
 
 **檔案**：`train_portfolio.py`
 
