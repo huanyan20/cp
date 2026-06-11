@@ -75,11 +75,11 @@ def describe_torch_device(device: str) -> str:
     return f"cuda ({torch.cuda.get_device_name(0)})"
 
 
-# O2 — layered training protocol. Tiers differ by seed count; timesteps fixed at 300K.
+# O2 — layered training protocol. Tiers differ by seed count; timesteps fixed at 500K.
 TIER_PRESETS: dict[str, dict[str, int]] = {
-    "smoke": {"timesteps": 300_000, "seeds": 1},
-    "candidate": {"timesteps": 300_000, "seeds": 2},
-    "promotion": {"timesteps": 300_000, "seeds": 3},
+    "smoke": {"timesteps": 500_000, "seeds": 1},
+    "candidate": {"timesteps": 500_000, "seeds": 2},
+    "promotion": {"timesteps": 500_000, "seeds": 3},
 }
 
 
