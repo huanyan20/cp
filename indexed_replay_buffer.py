@@ -1,0 +1,182 @@
+import numpy as np
+import torch as th
+from gymnasium import spaces
+from typing import Any, Dict, List, Optional, Union
+import warnings
+import psutil
+
+from stable_baselines3.common.buffers import BaseBuffer
+from stable_baselines3.common.vec_env import VecNormalize
+from stable_baselines3.common.type_aliases import ReplayBufferSamples
+
+class IndexedReplayBuffer(BaseBuffer):
+    """
+    Memory-efficient ReplayBuffer for TaiwanStockEnv.
+    Stores only time index (t) and dynamic account features.
+    Reconstructs full observations on-the-fly during sampling.
+    Reduces memory from ~374KB/transition to ~2.4KB/transition.
+    """
+
+    def __init__(
+        self,
+        buffer_size: int,
+        observation_space: spaces.Space,
+        action_space: spaces.Space,
+        device: Union[th.device, str] = "auto",
+        n_envs: int = 1,
+        optimize_memory_usage: bool = False,
+        handle_timeout_termination: bool = True,
+        env: Any = None,
+    ):
+        super().__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
+
+        self.buffer_size = max(buffer_size // n_envs, 1)
+
+        if optimize_memory_usage and handle_timeout_termination:
+            raise ValueError(
+                "ReplayBuffer does not support optimize_memory_usage = True "
+                "and handle_timeout_termination = True simultaneously."
+            )
+        self.optimize_memory_usage = optimize_memory_usage
+        self.handle_timeout_termination = handle_timeout_termination
+
+        if env is None:
+            raise ValueError("IndexedReplayBuffer requires `env` to be passed in replay_buffer_kwargs.")
+
+        unwrapped_env = env.envs[0] if hasattr(env, "envs") else env
+        self.window_size = unwrapped_env.window_size
+        self.num_stocks = unwrapped_env.num_stocks
+        self.num_market_features = unwrapped_env.num_market_features
+        self.market_dim = self.window_size * self.num_market_features
+        self.enable_sl_features = unwrapped_env.enable_sl_features
+        self._NUM_ACCOUNT_FEATURES = unwrapped_env._NUM_ACCOUNT_FEATURES
+        self.obs_dim_per_stock = self.market_dim + self._NUM_ACCOUNT_FEATURES + (3 if self.enable_sl_features else 0)
+
+        # References to static environment arrays
+        self.market_data = unwrapped_env._market_data
+        self.sl_data = unwrapped_env._sl_data if self.enable_sl_features else None
+
+        # Memory allocations
+        self.t_memory = np.zeros((self.buffer_size, self.n_envs), dtype=np.int32)
+        
+        self.account_observations = np.zeros(
+            (self.buffer_size, self.n_envs, self.num_stocks, self._NUM_ACCOUNT_FEATURES), 
+            dtype=np.float32
+        )
+        
+        if not optimize_memory_usage:
+            self.account_next_observations = np.zeros(
+                (self.buffer_size, self.n_envs, self.num_stocks, self._NUM_ACCOUNT_FEATURES), 
+                dtype=np.float32
+            )
+
+        self.actions = np.zeros(
+            (self.buffer_size, self.n_envs, self.action_dim), dtype=self._maybe_cast_dtype(action_space.dtype)
+        )
+
+        self.rewards = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
+        self.dones = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
+        self.timeouts = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
+
+        self.current_t = np.full((self.n_envs,), self.window_size, dtype=np.int32)
+
+    def add(
+        self,
+        obs: np.ndarray,
+        next_obs: np.ndarray,
+        action: np.ndarray,
+        reward: np.ndarray,
+        done: np.ndarray,
+        infos: List[Dict[str, Any]],
+    ) -> None:
+        action = action.reshape((self.n_envs, self.action_dim))
+
+        # Extract account block from obs
+        acc_obs = obs[:, :, self.market_dim : self.market_dim + self._NUM_ACCOUNT_FEATURES]
+        acc_next_obs = next_obs[:, :, self.market_dim : self.market_dim + self._NUM_ACCOUNT_FEATURES]
+
+        self.t_memory[self.pos] = self.current_t
+        self.account_observations[self.pos] = np.array(acc_obs)
+
+        if self.optimize_memory_usage:
+            self.account_observations[(self.pos + 1) % self.buffer_size] = np.array(acc_next_obs)
+            self.t_memory[(self.pos + 1) % self.buffer_size] = self.current_t + 1
+        else:
+            self.account_next_observations[self.pos] = np.array(acc_next_obs)
+
+        self.actions[self.pos] = np.array(action)
+        self.rewards[self.pos] = np.array(reward)
+        self.dones[self.pos] = np.array(done)
+
+        if self.handle_timeout_termination:
+            self.timeouts[self.pos] = np.array([info.get("TimeLimit.truncated", False) for info in infos])
+
+        self.pos += 1
+        if self.pos == self.buffer_size:
+            self.full = True
+            self.pos = 0
+
+        self.current_t += 1
+        for i in range(self.n_envs):
+            if done[i]:
+                self.current_t[i] = self.window_size
+
+    def sample(self, batch_size: int, env: Optional[VecNormalize] = None) -> ReplayBufferSamples:
+        if not self.optimize_memory_usage:
+            # We can sample normally, just replacing self.observations
+            if self.full:
+                batch_inds = (np.random.randint(1, self.buffer_size, size=batch_size) + self.pos) % self.buffer_size
+            else:
+                batch_inds = np.random.randint(0, self.pos, size=batch_size)
+            return self._get_samples(batch_inds, env=env)
+            
+        if self.full:
+            batch_inds = (np.random.randint(1, self.buffer_size, size=batch_size) + self.pos) % self.buffer_size
+        else:
+            batch_inds = np.random.randint(0, self.pos, size=batch_size)
+        return self._get_samples(batch_inds, env=env)
+
+    def _reconstruct_obs(self, t_array: np.ndarray, acc_array: np.ndarray) -> np.ndarray:
+        batch_size = len(t_array)
+        obs = np.empty((batch_size, self.num_stocks, self.obs_dim_per_stock), dtype=np.float32)
+        for i in range(batch_size):
+            t = t_array[i]
+            start = t - self.window_size
+            market_slice = self.market_data[start:t].transpose(1, 0, 2).reshape(self.num_stocks, self.market_dim)
+            obs[i, :, :self.market_dim] = market_slice
+            obs[i, :, self.market_dim : self.market_dim + self._NUM_ACCOUNT_FEATURES] = acc_array[i]
+            if self.enable_sl_features:
+                obs[i, :, self.market_dim + self._NUM_ACCOUNT_FEATURES:] = self.sl_data[t]
+        return obs
+
+    def _get_samples(self, batch_inds: np.ndarray, env: Optional[VecNormalize] = None) -> ReplayBufferSamples:
+        env_indices = np.random.randint(0, high=self.n_envs, size=(len(batch_inds),))
+
+        t_obs = self.t_memory[batch_inds, env_indices]
+        acc_obs = self.account_observations[batch_inds, env_indices, :]
+        obs = self._reconstruct_obs(t_obs, acc_obs)
+
+        if self.optimize_memory_usage:
+            next_inds = (batch_inds + 1) % self.buffer_size
+            t_next = self.t_memory[next_inds, env_indices]
+            acc_next = self.account_observations[next_inds, env_indices, :]
+            next_obs = self._reconstruct_obs(t_next, acc_next)
+        else:
+            t_next = t_obs + 1
+            acc_next = self.account_next_observations[batch_inds, env_indices, :]
+            next_obs = self._reconstruct_obs(t_next, acc_next)
+
+        data = (
+            self._normalize_obs(obs, env),
+            self.actions[batch_inds, env_indices, :],
+            self._normalize_obs(next_obs, env),
+            (self.dones[batch_inds, env_indices] * (1 - self.timeouts[batch_inds, env_indices])).reshape(-1, 1),
+            self._normalize_reward(self.rewards[batch_inds, env_indices].reshape(-1, 1), env),
+        )
+        return ReplayBufferSamples(*tuple(map(self.to_torch, data)))
+
+    @staticmethod
+    def _maybe_cast_dtype(dtype: Any) -> Any:
+        if dtype == np.float64:
+            return np.float32
+        return dtype

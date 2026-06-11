@@ -24,6 +24,7 @@ from settings import (  # noqa: E402
 )
 from stock_universe import MACRO_TICKERS_RL, TICKERS_TECH_EXPANDED  # noqa: E402
 from trading_env import TaiwanStockEnv  # noqa: E402
+from indexed_replay_buffer import IndexedReplayBuffer  # noqa: E402
 
 SETTINGS = load_settings()
 TRAIN_START = SETTINGS.research.train_start
@@ -153,9 +154,9 @@ def build_model(
             train_freq=10,
             gradient_steps=1,
             ent_coef="auto",
-            optimize_memory_usage=True,
             policy_kwargs=policy_kwargs,
-            replay_buffer_kwargs=dict(handle_timeout_termination=False),
+            replay_buffer_class=IndexedReplayBuffer,
+            replay_buffer_kwargs=dict(handle_timeout_termination=False, env=env),
         )
         return model, None
 
