@@ -22,7 +22,7 @@ playwright_state.json
 signal.json
 executed_signals.json
 pending_buys_*.json
-logs/
+/logs/
 
 # Generated research artifacts
 results_dir/
@@ -47,8 +47,8 @@ capital_flow_analysis/reports/*.md
 # Local code-intel tooling (generated)
 .understand-anything/
 
-# Research run logs (metrics JSON lives under .research/runs/)
-.research/archive/logs/
+# Research WF terminal logs (metrics JSON → .research/runs/ or results_dir/)
+.research/archive/logs/*.log
 
 # IDE / OS
 .vscode/

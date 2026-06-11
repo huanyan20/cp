@@ -13,8 +13,7 @@
 | `reviews/P10-reviewed-by-external.md` | P10 cross-review | 歷史 |
 | `reviews/SAC-R-PLAN-REVIEW-BRIEF.md` | SAC-R 審核 brief | superseded by v3 |
 | `decisions/sac-r-spike.md` | R-S0 決策 | SAC-R frozen |
-| `logs/m2-smoke.log` | 中止的 r5 全期 smoke | ~29k/300k |
-| `logs/m2-smoke-quick.log` | r5.1 2025H1 30K 短跑 | 參考用 |
+| [`logs/`](logs/README.md) | WF 終端日誌 | 本地 gitignored |
 
 ## 文件封存
 

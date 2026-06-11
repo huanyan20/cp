@@ -41,7 +41,7 @@
 
 ### 1.3 現階段
 
-`phase=rl_rebuild_v3` · `train_slot=free` · 下一步 **M1a**（code-only，無 WF）
+`phase=rl_rebuild_v3` · `train_slot=free` · **M2-smoke 300K pending**（人類確認；短跑見 `.research/runs/`）
 
 ---
 
@@ -108,11 +108,9 @@ P8/P10 implement **已完成**。外部 agent 現任務：
 
 ```mermaid
 stateDiagram-v2
-    [*] --> M1a
-    M1a --> M1b: obs tests pass
-    M1b --> M1c: optional
-    M1b --> M2smoke: r5 ready
-    M2smoke --> M2candidate: 2025H1 MDD < r4
+    [*] --> M1done
+    M1done --> M2smoke: human confirm 300K
+    M2smoke --> M2candidate: 2025H1 MDD < r4 + top<50%
     M2candidate --> M2promotion: worst trend OK
     M2promotion --> GateRetry: MDD <= 35%
     M2promotion --> PauseRL: MDD > 38%
@@ -123,12 +121,11 @@ stateDiagram-v2
 | ID | 說明 | 狀態 |
 |----|------|------|
 | P8 | IndexedReplayBuffer | done |
-| R7/R7b/R8/R9 | SAC 工程實驗 | **cancelled** |
+| M1a/M1b/M1d/M1c | obs · reward r5 · decode | **done** (r5.1) |
+| M2-smoke | 300K seed42 | **pending**（人類確認） |
+| M2-candidate / promotion | O2 tier WF | blocked |
+| R7/R7b/R8/R9 | SAC 工程 | **cancelled** |
 | SAC-R | Recurrent line | **frozen** |
-| M1a | obs POMDP | pending |
-| M1b | reward r5 | pending |
-| M1c | concentration guard | optional |
-| M2-smoke / candidate / promotion | O2 tier WF | blocked |
 
 ---
 
@@ -139,7 +136,7 @@ stateDiagram-v2
 
 1. 讀 .research/research_state.json 與 experiment_ledger.jsonl 最後 5 行
 2. 活躍計畫：docs/RESEARCH_STRATEGY_V3.md（勿恢復 R7b/R8/R9/SAC-R）
-3. 取 queue 第一個 pending 任務（應為 M1a）
+3. 取 queue 第一個 pending 任務（應為 M2-smoke；需人類確認 train_slot）
 4. M1 = code + pytest；M2 = walk_forward tier（需人確認 train_slot）
 5. append ledger、更新 state
 6. Gate APPROVED 或 RL 停損 → 終止並摘要
@@ -153,5 +150,6 @@ stateDiagram-v2
 - [x] P8 merged · P10 ablation · cross_review
 - [x] v3 戰略文件 · research_state v4
 - [x] R7/R7b/R8/R9 已砍 · SAC-R frozen
-- [ ] v3 外部審核 → `V3-reviewed-by-*.md`
-- [ ] M1a → M1b → M2-smoke
+- [x] v3 外部審核 → `V3-reviewed-by-*-r2.md`
+- [x] M1a → M1b → M1d → M1c（r5.1）
+- [ ] M2-smoke 300K（人類確認）
