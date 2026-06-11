@@ -125,13 +125,6 @@ def build_model(
             total_timesteps=timesteps,
             verbose=1,
         )
-        # torch.compile: fuse forward/backward CUDA kernels for ~20% speedup
-        if torch.cuda.is_available() and hasattr(torch, "compile"):
-            try:
-                model.policy = torch.compile(model.policy, mode="reduce-overhead")
-                print("[torch.compile] PPO policy compiled successfully.")
-            except Exception as e:
-                print(f"[torch.compile] PPO compile skipped: {e}")
         return model, callback
 
     if algo == "sac":
@@ -174,13 +167,6 @@ def build_model(
                 storage_dtype=np.float16,
             ),
         )
-        # torch.compile: fuse forward/backward CUDA kernels for ~20% speedup
-        if torch.cuda.is_available() and hasattr(torch, "compile"):
-            try:
-                model.policy = torch.compile(model.policy, mode="reduce-overhead")
-                print("[torch.compile] SAC policy compiled successfully.")
-            except Exception as e:
-                print(f"[torch.compile] SAC compile skipped: {e}")
         return model, None
 
     raise ValueError(f"Unsupported algo: {algo}")

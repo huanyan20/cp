@@ -10,7 +10,7 @@
 | 方案 | 工程成本 | 預估速度提升 | 狀態 |
 |------|---------|------------|------|
 | A. 超參數 Batch Size 最大化 | 低 | 1.5x | ✅ 已實作 |
-| B. `torch.compile` JIT 加速 | 低 | 1.2–1.3x | ✅ 已實作 |
+| B. `torch.compile` JIT 加速 | 低 | N/A | ❌ GTX 1060 不支援 |
 | C. Numba 環境核心加速 | 中 | 2–4x | ✅ 已實作 |
 | D. 多 Worker 並行訓練 | 低 | N Seeds 倍 | ✅ 已實作（`--workers 6`）|
 | E. GPU 張量化環境 | 高 | 30–100x | 📋 M4 預留 |
@@ -31,13 +31,11 @@
 
 ---
 
-## 方案 B：`torch.compile` JIT 編譯（已完成）
+## 方案 B：`torch.compile` JIT 編譯（已放棄）
 
 **原理**：PyTorch 2.0 新增的 `torch.compile()` 會把 Policy 網路的前向/反向傳播融合成更有效率的 CUDA 核心指令，省去 Python overhead。
 
-**實作位置**：`train_portfolio.py` — `_create_model()` 中 PPO/SAC 建立後立即呼叫 `torch.compile(model.policy)`。
-
-**預期效果**：前向傳播提速 15–30%。無需改任何訓練邏輯。
+**狀態**：❌ GTX 1060（Compute Capability 6.1）太過老舊，不支援 PyTorch Triton 編譯器（最低需求為 Volta 7.0）。嘗試強行編譯會導致 CUDA 崩潰，因此已將此段程式碼移除。
 
 ---
 
