@@ -108,8 +108,8 @@ def build_model(
             verbose=1,
             device=device,
             learning_rate=3e-5,
-            n_steps=256,
-            batch_size=64,
+            n_steps=2048,      # Increased from 256 for better data collection
+            batch_size=512,    # Increased from 64 to saturate CUDA cores
             n_epochs=10,
             gamma=0.99,
             gae_lambda=0.95,
@@ -151,7 +151,7 @@ def build_model(
             learning_rate=3e-4,
             buffer_size=buffer_size,
             learning_starts=1_000,
-            batch_size=256,
+            batch_size=1024,    # Increased from 256 to maximize GPU utilization
             tau=0.005,
             gamma=0.99,
             train_freq=10,
