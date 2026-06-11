@@ -3,6 +3,9 @@
 import argparse
 import os
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -13,7 +16,13 @@ except ImportError:  # pragma: no cover
 
 from stable_baselines3 import PPO, SAC  # noqa: E402
 from stable_baselines3.common.callbacks import BaseCallback  # noqa: E402
+from stable_baselines3.common.monitor import Monitor  # noqa: E402
 from stable_baselines3.common.utils import set_random_seed  # noqa: E402
+from stable_baselines3.common.vec_env import (  # noqa: E402
+    DummyVecEnv,
+    SubprocVecEnv,
+    VecEnv,
+)
 
 from data_loader import fetch_multi_asset_data  # noqa: E402
 from gnn_extractor import GnnFeatureExtractor, TemporalGnnFeatureExtractor  # noqa: E402
@@ -30,6 +39,46 @@ TRAIN_START = SETTINGS.research.train_start
 TRAIN_END = SETTINGS.research.train_end
 WINDOW_SIZE = SETTINGS.research.window_size
 TIMESTEPS = SETTINGS.research.timesteps
+
+
+@dataclass(frozen=True)
+class PpoEfficiencyConfig:
+    """P10 ablation knobs. Defaults match R6 (DummyVecEnv, n_steps=256, n_epochs=10)."""
+
+    n_envs: int = 1
+    vecenv: str = "dummy"  # dummy | subproc
+    n_steps: int = 256
+    n_epochs: int = 10
+    batch_size: int = 64
+
+    @classmethod
+    def from_settings(cls, settings=None) -> "PpoEfficiencyConfig":
+        s = settings or SETTINGS
+        return cls(
+            n_envs=s.research.ppo_n_envs,
+            vecenv=s.research.ppo_vecenv,
+            n_steps=s.research.ppo_n_steps,
+            n_epochs=s.research.ppo_n_epochs,
+            batch_size=s.research.ppo_batch_size,
+        )
+
+
+def build_ppo_vec_env(
+    env_factory: Callable[[], Any],
+    cfg: PpoEfficiencyConfig,
+) -> VecEnv:
+    """Wrap env factory in DummyVecEnv or SubprocVecEnv (Windows spawn)."""
+    n_envs = max(1, cfg.n_envs)
+
+    def _init() -> Monitor:
+        return Monitor(env_factory())
+
+    if n_envs == 1:
+        return DummyVecEnv([_init])
+    env_fns = [_init for _ in range(n_envs)]
+    if cfg.vecenv == "subproc":
+        return SubprocVecEnv(env_fns, start_method="spawn")
+    return DummyVecEnv(env_fns)
 
 
 class EntCoefScheduleCallback(BaseCallback):
@@ -85,10 +134,11 @@ def build_policy_kwargs(
 
 def build_model(
     algo: str,
-    env: TaiwanStockEnv,
+    env,
     timesteps: int,
     temporal_extractor: bool = False,
     device: str | None = None,
+    ppo_cfg: PpoEfficiencyConfig | None = None,
 ):
     if device is None:
         device = resolve_torch_device(SETTINGS.research.torch_device)
@@ -99,15 +149,20 @@ def build_model(
     policy_kwargs = build_policy_kwargs(temporal_extractor=temporal_extractor)
 
     if algo == "ppo":
+        cfg = ppo_cfg or PpoEfficiencyConfig.from_settings()
+        print(
+            f"[PPO] vecenv={cfg.vecenv} n_envs={cfg.n_envs} "
+            f"n_steps={cfg.n_steps} n_epochs={cfg.n_epochs} batch_size={cfg.batch_size}"
+        )
         model = PPO(
             "MlpPolicy",
             env,
             verbose=1,
             device=device,
             learning_rate=3e-5,
-            n_steps=256,
-            batch_size=64,
-            n_epochs=10,
+            n_steps=cfg.n_steps,
+            batch_size=cfg.batch_size,
+            n_epochs=cfg.n_epochs,
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.20,
@@ -160,6 +215,30 @@ def build_model(
         return model, None
 
     raise ValueError(f"Unsupported algo: {algo}")
+
+
+def train_ppo_with_config(
+    env_factory: Callable[[], TaiwanStockEnv],
+    ppo_cfg: PpoEfficiencyConfig,
+    timesteps: int,
+    temporal_extractor: bool = False,
+    device: str | None = None,
+) -> tuple[PPO, float]:
+    """Train PPO on vec-wrapped env; return (model, elapsed_seconds)."""
+    vec_env = build_ppo_vec_env(env_factory, ppo_cfg)
+    model, callback = build_model(
+        "ppo",
+        vec_env,
+        timesteps,
+        temporal_extractor=temporal_extractor,
+        device=device,
+        ppo_cfg=ppo_cfg,
+    )
+    t_start = time.time()
+    model.learn(total_timesteps=timesteps, progress_bar=True, callback=callback)
+    elapsed = time.time() - t_start
+    vec_env.close()
+    return model, elapsed
 
 
 def main(

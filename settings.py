@@ -145,6 +145,12 @@ class ResearchSettings:
     )
     # auto: use CUDA when available; cuda: require GPU; cpu: force CPU
     torch_device: str = field(default_factory=lambda: _env_str("RESEARCH_DEVICE", "auto"))
+    # P10 PPO efficiency (defaults = R6 baseline until ablation adopts)
+    ppo_n_envs: int = field(default_factory=lambda: _env_int("PPO_N_ENVS", 1))
+    ppo_vecenv: str = field(default_factory=lambda: _env_str("PPO_VECENV", "dummy"))
+    ppo_n_steps: int = field(default_factory=lambda: _env_int("PPO_N_STEPS", 256))
+    ppo_n_epochs: int = field(default_factory=lambda: _env_int("PPO_N_EPOCHS", 10))
+    ppo_batch_size: int = field(default_factory=lambda: _env_int("PPO_BATCH_SIZE", 64))
 
 
 @dataclass(frozen=True)
