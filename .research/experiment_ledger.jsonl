@@ -1,0 +1,4 @@
+{"ts":"2026-06-11T00:00:00+08:00","agent":"setup","action":"research_loop_scaffold","decision":"phase=r6_ppo_running; queue prefilled P8/P10/R7/R8/R9; loop armed after R6 complete","metrics":null}
+{"ts": "2026-06-11T09:36:38+08:00", "agent": "orchestrator", "action": "freeze_r6", "decision": "experiment_report exit=0"}
+{"ts":"2026-06-11T10:35:00+08:00","agent":"cursor","action":"P10_implement","task_id":"P10","decision":"VecEnv+ablation script in cp-p10-ppo; smoke A0/A1 started","branch":"feat/p10-ppo-vecenv"}
+{"ts":"2026-06-11T12:30:00+08:00","agent":"cursor","action":"P10_ablation_start","task_id":"P10","decision":"300K A0-A3 2025H1 seed42 PPO_N_ENVS=2; log=cp-p10-ppo/results_dir/ppo_efficiency_ablation.log"}

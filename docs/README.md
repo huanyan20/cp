@@ -12,6 +12,7 @@
 | [`SUPERVISED_LEARNING_PLAN.md`](SUPERVISED_LEARNING_PLAN.md) | SL 混合架構規格 |
 | [`ALGORITHM_REVIEW.md`](ALGORITHM_REVIEW.md) | RL 算法合理性評估 |
 | [`SAC_BUFFER_PLAN.md`](SAC_BUFFER_PLAN.md) | SAC replay buffer 根本性解法（P8/R7–R9） |
+| [`RESEARCH_LOOP.md`](RESEARCH_LOOP.md) | R6 後多 Agent 研究迴圈（automation / worktree / 外部記憶） |
 | [`../教學文件.md`](../教學文件.md) | 逐模組完整教學 |
 
 ## 子專案

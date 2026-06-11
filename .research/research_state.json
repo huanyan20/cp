@@ -1,0 +1,107 @@
+{
+  "version": 2,
+  "phase": "post_r6",
+  "updated_at": "2026-06-11T12:00:00+08:00",
+  "goal": "Gate progress: P10 finish → cross_review → merge P8/P10 → R7",
+  "terminate_when": {
+    "gate_approved": true,
+    "or_queue_all_done": true
+  },
+  "gate": {
+    "status": "blocked",
+    "failed_checks": ["Drawdown Gate"],
+    "last_report_path": "experiment_report.md",
+    "worst_mdd": 0.4441,
+    "note": "R6 SAC enabled worst-case MDD 44.41% > 35%; P8→R7 primary lever"
+  },
+  "artifacts": {
+    "r6_wf_models": {
+      "sac_enabled": "12/12 (3 seeds × 4 periods)",
+      "ppo_disabled": "12/12",
+      "metrics_json": "6/6 in results_dir + .research/baselines/"
+    },
+    "p8_handoff": ".research/handoffs/P8.json",
+    "p10_handoff": null,
+    "p10_smoke_ablation": "cp-p10-ppo/results_dir/ppo_efficiency_ablation.json (smoke only)"
+  },
+  "train_slot": {
+    "status": "busy",
+    "owner": "P10_ablation",
+    "note": "Full 300K ablation A0-A3 on 2025H1 seed42; ~4-8h"
+  },
+  "agents": {
+    "cursor": {
+      "runtime": "Cursor IDE Agent",
+      "tasks": ["P10", "cross_review_P8", "R7_coordination"],
+      "worktree": "../cp-p10-ppo"
+    },
+    "external": {
+      "runtime": "antigravity_ide",
+      "tool": "Google Antigravity IDE",
+      "tasks": ["P8", "cross_review_P10"],
+      "worktree": "../cp-p8-buffer",
+      "brief": ".research/EXTERNAL_AGENT_BRIEF.md"
+    }
+  },
+  "queue": [
+    {
+      "id": "freeze_r6",
+      "status": "done",
+      "title": "Freeze R6 baselines"
+    },
+    {
+      "id": "P8",
+      "status": "handoff",
+      "phase": "handoff",
+      "owner": "external",
+      "branch": "feat/p8-indexed-replay-buffer",
+      "commit": "fe831c4",
+      "worktree": "../cp-p8-buffer",
+      "handoff_out": ".research/handoffs/P8.json",
+      "note": "IndexedReplayBuffer implemented; full pytest suite blocked by OOM on agent machine"
+    },
+    {
+      "id": "P10",
+      "status": "in_progress",
+      "phase": "implement",
+      "owner": "cursor",
+      "branch": "feat/p10-ppo-vecenv",
+      "worktree": "../cp-p10-ppo",
+      "handoff_out": ".research/handoffs/P10.json",
+      "note": "VecEnv+ablation script in worktree; smoke 1.29x fps; full 300K ablation pending"
+    },
+    {
+      "id": "cross_review",
+      "status": "blocked",
+      "blocked_by": ["P10"],
+      "phase": "cross_review",
+      "requires": [".research/handoffs/P10.json"],
+      "outputs": [
+        ".research/reviews/P10-reviewed-by-external.md",
+        ".research/reviews/P8-reviewed-by-cursor.md"
+      ]
+    },
+    {
+      "id": "R7",
+      "status": "blocked",
+      "blocked_by": ["cross_review"],
+      "requires_train_slot": true
+    },
+    {
+      "id": "R8",
+      "status": "blocked",
+      "blocked_by": ["R7"],
+      "condition": "r7_worst_mdd_still_above_35pct"
+    },
+    {
+      "id": "R9",
+      "status": "blocked",
+      "blocked_by": ["R7"],
+      "condition": "r7_worst_mdd_still_above_35pct"
+    }
+  ],
+  "r6_status": {
+    "sac_enabled_seeds": { "42": "done", "43": "done", "44": "done" },
+    "ppo_disabled_seeds": { "42": "done", "43": "done", "44": "done" }
+  }
+}

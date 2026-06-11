@@ -1,0 +1,136 @@
+{
+    "algo": "ppo",
+    "seed": 44,
+    "cash_mode": "disabled",
+    "enable_cash_action": false,
+    "enable_margin_short": false,
+    "train_test_period": "Walk-Forward",
+    "timesteps": 300000,
+    "env_config_version": "r4",
+    "env_config_hash": "1bbfe5c2",
+    "env_config": {
+        "version": "r4",
+        "lambda_cost": 5.0,
+        "lambda_turnover": 1.0,
+        "lambda_cash": 0.0,
+        "lambda_drawdown": 0.8,
+        "lambda_cash_defensive": 0.2,
+        "reward_ref_dd": 0.03,
+        "regime_dd_threshold": 0.08,
+        "regime_penalty_coef": 1.0,
+        "topk": 5,
+        "softmax_temp": 0.5,
+        "max_leverage": 2.0,
+        "use_benchmark_reward": true,
+        "hash": "1bbfe5c2"
+    },
+    "overall": {
+        "total_return": 2.646375043569966,
+        "max_drawdown": 0.25387425524671486,
+        "sharpe": 1.6064529414502653,
+        "sortino": 2.5947161508911236,
+        "win_rate": 0.5356371490280778,
+        "avg_cash_weight": 2.511093477451003e-05,
+        "long_exposure": 0.9999825954437256,
+        "short_exposure": 0.0,
+        "cash_weight_std": 4.6422480001665385e-05,
+        "cash_corr_next_return": 0.05304909904934096,
+        "short_corr_next_return": 0.0,
+        "turnover": 0.07286944698847413,
+        "top_holdings": {
+            "3653.TW": 0.2655111253261566,
+            "2303.TW": 0.23687662184238434,
+            "3443.TW": 0.22068440914154053,
+            "8046.TW": 0.12272358685731888,
+            "5347.TWO": 0.0810212567448616
+        }
+    },
+    "periods": {
+        "2024H2": {
+            "total_return": 0.3271690743994202,
+            "max_drawdown": 0.21355754045721842,
+            "sharpe": 1.3306442961808174,
+            "sortino": 2.1376616421195895,
+            "win_rate": 0.5203252032520326,
+            "avg_cash_weight": 6.661473250970607e-05,
+            "long_exposure": 0.9999381303787231,
+            "short_exposure": 0.0,
+            "cash_weight_std": 5.742420662630579e-05,
+            "cash_corr_next_return": 0.008017745226909545,
+            "short_corr_next_return": 0.0,
+            "turnover": 0.008464398549273857,
+            "top_holdings": {
+                "3653.TW": 0.999309241771698
+            },
+            "test_start": "2024-07-01",
+            "test_end": "2024-12-31",
+            "was_clamped": false
+        },
+        "2025H1": {
+            "total_return": 0.036285242223142555,
+            "max_drawdown": 0.13690600296544636,
+            "sharpe": 0.40530279816495557,
+            "sortino": 0.48541209456877105,
+            "win_rate": 0.5701754385964912,
+            "avg_cash_weight": 1.5050172805786133e-05,
+            "long_exposure": 0.9999943375587463,
+            "short_exposure": 0.0,
+            "cash_weight_std": 3.6494174057790486e-05,
+            "cash_corr_next_return": 0.03174175780576645,
+            "short_corr_next_return": 0.0,
+            "turnover": 0.023490029419854022,
+            "top_holdings": {
+                "2303.TW": 0.962051510810852,
+                "5347.TWO": 0.015753502026200294
+            },
+            "test_start": "2025-01-01",
+            "test_end": "2025-06-30",
+            "was_clamped": false
+        },
+        "2025H2": {
+            "total_return": 0.3411225989615474,
+            "max_drawdown": 0.1577302799689294,
+            "sharpe": 1.665573823011194,
+            "sortino": 3.095789928469458,
+            "win_rate": 0.5080645161290323,
+            "avg_cash_weight": 2.8518899794547787e-06,
+            "long_exposure": 1.0000022649765015,
+            "short_exposure": 0.0,
+            "cash_weight_std": 1.2700983357830894e-05,
+            "cash_corr_next_return": -0.05852340317525796,
+            "short_corr_next_return": 0.0,
+            "turnover": 0.2339209993726634,
+            "top_holdings": {
+                "8046.TW": 0.458234041929245,
+                "5347.TWO": 0.287981778383255,
+                "6213.TW": 0.13327334821224213,
+                "6274.TWO": 0.03632344305515289,
+                "2345.TW": 0.024094007909297943
+            },
+            "test_start": "2025-07-01",
+            "test_end": "2025-12-31",
+            "was_clamped": false
+        },
+        "2026H1": {
+            "total_return": 0.9769117743986322,
+            "max_drawdown": 0.25387425524671514,
+            "sharpe": 2.6442307818646,
+            "sortino": 5.261206566552697,
+            "win_rate": 0.5490196078431373,
+            "avg_cash_weight": 1.33666337705126e-05,
+            "long_exposure": 0.9999992251396179,
+            "short_exposure": 0.0,
+            "cash_weight_std": 3.450451711627504e-05,
+            "cash_corr_next_return": 0.23172824531575087,
+            "short_corr_next_return": 0.0,
+            "turnover": 0.009934957431658975,
+            "top_holdings": {
+                "3443.TW": 0.9993552565574646
+            },
+            "test_start": "2026-01-01",
+            "test_end": "2026-06-11",
+            "was_clamped": true
+        }
+    },
+    "skipped_periods": {}
+}

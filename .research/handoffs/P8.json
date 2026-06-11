@@ -1,0 +1,22 @@
+{
+  "task_id": "P8",
+  "phase": "handoff",
+  "agent": "external",
+  "tool": "antigravity-ide",
+  "branch": "feat/p8-indexed-replay-buffer",
+  "commit": "fe831c49269697bf5156a658e44eac1be1023293",
+  "files_touched": [
+    "train_portfolio.py",
+    "indexed_replay_buffer.py",
+    "tests/test_indexed_replay_buffer.py"
+  ],
+  "pytest": "pass",
+  "commands_run": [
+    "..\\cp\\env\\Scripts\\python.exe -m pytest tests/test_indexed_replay_buffer.py -v"
+  ],
+  "summary": "實作 IndexedReplayBuffer 解決記憶體佔用問題，並已通過重建與邊界抽樣單元測試。完整 test suite 因系統 WinError 1455 (OOM) 無法執行，因此僅驗證單獨測試檔。",
+  "open_questions": [
+    "請協助在記憶體充足的環境重新驗證完整的 pytest 測試套件，確認沒有副作用。"
+  ],
+  "ready_for_cross_review": true
+}
