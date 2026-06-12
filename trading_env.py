@@ -184,6 +184,7 @@ class TaiwanStockEnv(gym.Env):
 
         prev_value = self._portfolio_value
         self._update_portfolio(log_returns)
+        # _compute_reward will update self._pomdp_cache; _get_observation reads it.
         reward = self._compute_reward(prev_value, self._portfolio_value, trade_cost)
 
         self._holding_periods = np.where(
@@ -223,6 +224,10 @@ class TaiwanStockEnv(gym.Env):
         self._cash_weight = 1.0
         self._last_turnover = 0.0
         self.trades_history = []
+        # Per-step cache: _compute_pomdp_features() is called by both
+        # _compute_reward() and _get_observation() in the same step.
+        # Invalidated (set to None) before history append; then computed once.
+        self._pomdp_cache: tuple[float, float, float] | None = None
 
     def _transform_action(
         self, action: np.ndarray, bypass_action_transform: bool = False
@@ -411,16 +416,28 @@ class TaiwanStockEnv(gym.Env):
         )
 
     def _compute_pomdp_features(self) -> tuple[float, float, float]:
-        """Rolling vol / Sortino proxy / current DD — shared by obs and reward."""
+        """Rolling vol / Sortino proxy / current DD — shared by obs and reward.
+
+        Result is cached per-step to avoid recomputation when both
+        _compute_reward() and _get_observation() call this in the same step.
+        Cache is invalidated by _compute_reward() before history is appended.
+        """
+        if self._pomdp_cache is not None:
+            return self._pomdp_cache
+
         current_dd = float(np.clip(self._current_drawdown(), 0.0, 1.0))
         n = len(self._return_history)
         if n < 2:
-            return 0.0, 0.0, current_dd
+            result = (0.0, 0.0, current_dd)
+            self._pomdp_cache = result
+            return result
 
         arr = np.array(self._return_history, dtype=np.float64)
         rolling_vol = float(np.clip(np.std(arr) * 100.0, 0.0, 1.0))
         if n < 5:
-            return rolling_vol, 0.0, current_dd
+            result = (rolling_vol, 0.0, current_dd)
+            self._pomdp_cache = result
+            return result
 
         mean_r = float(np.mean(arr))
         neg_returns = arr[arr < 0]
@@ -430,13 +447,22 @@ class TaiwanStockEnv(gym.Env):
             else float(np.std(arr) + 1e-8)
         )
         sortino_proxy = float(_softsign(mean_r / downside_std))
-        return rolling_vol, sortino_proxy, current_dd
+        result = (rolling_vol, sortino_proxy, current_dd)
+        self._pomdp_cache = result
+        return result
 
     def _compute_reward(
         self, prev_value: float, curr_value: float, trade_cost: float
     ) -> float:
         log_r = float(np.log(max(curr_value, 1e-8) / max(prev_value, 1e-8)))
+        # Invalidate POMDP cache BEFORE appending — history changes → old cache stale
+        self._pomdp_cache = None
         self._return_history.append(log_r)  # must happen before kernel (history_len)
+
+        # Compute once and cache — _get_observation() reuses this in the same step,
+        # avoiding a second np.std/np.mean pass over the return history deque.
+        self._pomdp_cache = self._compute_pomdp_features()
+        _, sortino_proxy, raw_dd = self._pomdp_cache
 
         capital_util = float(np.sum(np.abs(self._positions)))
         cash_ratio = (
@@ -444,8 +470,6 @@ class TaiwanStockEnv(gym.Env):
             if self.enable_cash_action
             else max(0.0, 1.0 - capital_util)
         )
-        raw_dd = self._current_drawdown()
-        _, sortino_proxy, _ = self._compute_pomdp_features()
 
         if _NUMBA_AVAILABLE:
             return compute_reward_kernel(
@@ -529,7 +553,12 @@ class TaiwanStockEnv(gym.Env):
             self.initial_balance, 1e-8
         )
         dd_norm = float(np.clip(self._max_drawdown, 0.0, 1.0))
-        rolling_vol, sortino_proxy, current_dd = self._compute_pomdp_features()
+        # Reuse cached result from _compute_reward (same step) — avoids recomputation.
+        # Falls back to live compute on reset()'s first observation (cache is None).
+        rolling_vol, sortino_proxy, current_dd = (
+            self._pomdp_cache if self._pomdp_cache is not None
+            else self._compute_pomdp_features()
+        )
 
         obs = np.empty((self.num_stocks, self._obs_dim_per_stock), dtype=np.float32)
         market_dim = self.window_size * self.num_market_features
