@@ -24,7 +24,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import scripts.p5_analysis as p5_analysis
-from p5_analysis import apply_cost_drag, run_ablation, run_stress
+from scripts.p5_analysis import apply_cost_drag, run_ablation, run_stress
 from settings import AppSettings, StressSettings
 
 # ---------------------------------------------------------------------------

@@ -30,7 +30,7 @@ class MacroUniverseSeparationTests(unittest.TestCase):
 
     def test_rl_entrypoints_import_rl_macro_constant(self):
         root = Path(__file__).resolve().parents[1]
-        for filename in ["train_portfolio.py", "walk_forward.py", "evaluate_portfolio.py"]:
+        for filename in ["train_portfolio.py", "walk_forward.py", "scripts/evaluate_portfolio.py"]:
             text = (root / filename).read_text(encoding="utf-8")
             self.assertIn("MACRO_TICKERS_RL", text)
             self.assertNotIn("from stock_universe import MACRO_TICKERS,", text)

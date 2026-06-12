@@ -8,10 +8,10 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from cmoney_rpa import CMoneyRPA
-from rebalance_planner import build_dry_run_diff
+from rpa_pipeline.cmoney_rpa import CMoneyRPA
+from rpa_pipeline.rebalance_planner import build_dry_run_diff
 from settings import load_settings
-from signal_validator import load_signal
+from rpa_pipeline.signal_validator import load_signal
 
 SETTINGS = load_settings()
 

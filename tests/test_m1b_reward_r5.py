@@ -121,7 +121,7 @@ class M1bRewardR5Tests(unittest.TestCase):
         env._portfolio_value = env.initial_balance
         env._positions = np.array([0.465, 0.465], dtype=np.float32)
         env._cash_weight = 0.07
-        env._return_history.extend([0.005] * 20)
+        env._reward_calculator._return_history.extend([0.005] * 20)
 
         prev = env._portfolio_value
         env._portfolio_value *= 1.005

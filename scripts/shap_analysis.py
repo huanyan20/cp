@@ -9,6 +9,7 @@ import numpy as np
 import shap
 from stable_baselines3 import PPO
 
+from core.visualizations import plot_bar_chart, set_plot_style
 from data_loader import fetch_multi_asset_data
 from stock_universe import MACRO_TICKERS_RL, TICKERS_TECH_EXPANDED
 
@@ -102,13 +103,17 @@ def run_shap_analysis():
     importance = lgb_model.feature_importances_
     idx = np.argsort(importance)[-20:] # top 20
     
-    plt.figure(figsize=(10, 8))
-    plt.barh(np.array(feature_names)[idx], importance[idx], color='lightgreen')
-    plt.title('Top 20 Features Driving PPO Buy Actions (2024H2)\nSurrogate Model Feature Importance')
-    plt.xlabel('Importance (Splits)')
-    plt.tight_layout()
-    plt.savefig('results_dir/feature_importance_lgbm.png')
-    plt.close()
+    set_plot_style()
+    plot_bar_chart(
+        labels=np.array(feature_names)[idx],
+        values=importance[idx],
+        title='Top 20 Features Driving PPO Buy Actions (2024H2)\nSurrogate Model Feature Importance',
+        xlabel='Importance (Splits)',
+        ylabel='',
+        output_path='results_dir/feature_importance_lgbm.png',
+        horizontal=True,
+        color='lightgreen'
+    )
     print("[V] Saved: results_dir/feature_importance_lgbm.png")
     
     # 2. Run TreeSHAP
@@ -119,6 +124,7 @@ def run_shap_analysis():
     shap_values = explainer.shap_values(X_sample)
     
     # SHAP summary plot
+    set_plot_style()
     plt.figure(figsize=(10, 8))
     shap.summary_plot(shap_values, X_sample, feature_names=feature_names, show=False)
     plt.title('SHAP Summary: How Features Impact Buy Actions (2024H2)')

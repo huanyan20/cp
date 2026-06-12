@@ -12,15 +12,15 @@ from dotenv import load_dotenv
 # signal-validation and rebalance-planning were likewise extracted to dedicated modules
 # and re-exported here (see __all__) so existing callers of ``cmoney_rpa.<symbol>`` keep
 # working. ``_read_execution_log`` / ``_write_execution_log`` are also used internally.
-from cmoney_client import get_accounts_config, get_auto_aids
-from rebalance_planner import (
+from rpa_pipeline.cmoney_client import get_accounts_config, get_auto_aids
+from rpa_pipeline.rebalance_planner import (
     _current_lots_from_rpa,
     build_dry_run_diff,
     build_rebalance_plan,
     run_signal_file,
     write_dry_run_diff,
 )
-from signal_validator import (
+from rpa_pipeline.signal_validator import (
     EXECUTION_LOG_FILE,
     SignalError,
     _normalize_sid,

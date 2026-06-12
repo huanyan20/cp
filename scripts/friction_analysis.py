@@ -1,8 +1,14 @@
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import json
 import os
 
-import matplotlib.pyplot as plt
 import pandas as pd
+
+from core.visualizations import plot_bar_chart, plot_histogram, plot_multi_line_chart, set_plot_style
 
 
 def analyze_friction(csv_path="results_dir/trades_ppo_eval.csv", metrics_path="results_dir/metrics_ppo_eval.json"):
@@ -42,40 +48,43 @@ def analyze_friction(csv_path="results_dir/trades_ppo_eval.csv", metrics_path="r
         print(f"Median Holding Period: {sells['holding_period_days'].median()} steps")
         
         # Plot histogram of holding periods
-        plt.figure(figsize=(10, 5))
-        plt.hist(sells['holding_period_days'], bins=50, color='skyblue', edgecolor='black')
-        plt.title('Holding Period Distribution (SELLs)')
-        plt.xlabel('Holding Period (Steps)')
-        plt.ylabel('Frequency')
-        plt.grid(alpha=0.3)
-        plt.savefig('results_dir/holding_period_dist.png')
-        plt.close()
+        set_plot_style()
+        plot_histogram(
+            data=sells['holding_period_days'],
+            bins=50,
+            title='Holding Period Distribution (SELLs)',
+            xlabel='Holding Period (Steps)',
+            ylabel='Frequency',
+            color='skyblue',
+            output_path='results_dir/holding_period_dist.png'
+        )
         print("[V] Saved holding period distribution to: results_dir/holding_period_dist.png")
     
     # Plot trade count over time to identify over-trading periods
     trades_per_step = df.groupby('step').size()
-    plt.figure(figsize=(12, 5))
-    plt.bar(trades_per_step.index, trades_per_step.values, color='coral', width=1.0)
-    plt.title('Transactions per Step (Are we over-trading?)')
-    plt.xlabel('Step (Approximates Time)')
-    plt.ylabel('Number of Transactions')
-    plt.grid(alpha=0.3)
-    plt.savefig('results_dir/transactions_over_time.png')
-    plt.close()
+    set_plot_style()
+    plot_bar_chart(
+        labels=trades_per_step.index,
+        values=trades_per_step.values,
+        title='Transactions per Step (Are we over-trading?)',
+        xlabel='Step (Approximates Time)',
+        ylabel='Number of Transactions',
+        color='coral',
+        output_path='results_dir/transactions_over_time.png'
+    )
     print("[V] Saved transaction volume over time to: results_dir/transactions_over_time.png")
 
     # Plot cumulative friction
     df_step = df.groupby('step')['cost'].sum().reset_index()
     df_step['cum_cost'] = df_step['cost'].cumsum()
     
-    plt.figure(figsize=(12, 5))
-    plt.plot(df_step['step'], df_step['cum_cost'], color='red')
-    plt.title('Cumulative Friction Cost over Time')
-    plt.xlabel('Step')
-    plt.ylabel('Cumulative Cost (TWD)')
-    plt.grid(alpha=0.3)
-    plt.savefig('results_dir/cumulative_friction.png')
-    plt.close()
+    set_plot_style()
+    plot_multi_line_chart(
+        df=df_step.set_index('step')[['cum_cost']],
+        title='Cumulative Friction Cost over Time',
+        ylabel='Cumulative Cost (TWD)',
+        output_path='results_dir/cumulative_friction.png'
+    )
     print("[V] Saved cumulative friction to: results_dir/cumulative_friction.png")
 
 if __name__ == "__main__":

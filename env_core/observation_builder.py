@@ -21,6 +21,7 @@ class ObservationBuilder:
         enable_cash_action: bool = False,
         enable_margin_short: bool = False,
         enable_sl_features: bool = False,
+        num_sl_features: int = 0,
     ):
         self.num_stocks = num_stocks
         self.window_size = window_size
@@ -28,9 +29,10 @@ class ObservationBuilder:
         self.enable_cash_action = enable_cash_action
         self.enable_margin_short = enable_margin_short
         self.enable_sl_features = enable_sl_features
+        self.num_sl_features = num_sl_features
 
         self.market_dim = self.window_size * self.num_market_features
-        self.obs_dim_per_stock = self.market_dim + NUM_ACCOUNT_FEATURES
+        self.obs_dim_per_stock = self.market_dim + NUM_ACCOUNT_FEATURES + (self.num_sl_features if self.enable_sl_features else 0)
 
     def build(
         self,

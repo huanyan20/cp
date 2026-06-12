@@ -4,10 +4,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from core.visualizations import plot_bar_chart, plot_multi_line_chart, set_plot_style
 from stock_universe import TICKER_NAMES, get_ticker_sector
 
 
@@ -39,15 +39,16 @@ def analyze_sectors(trades_file="results_dir/trades_ppo_eval.csv"):
     
     sector_buys = buys.groupby('Sector')['Volume_TWD'].sum().sort_values(ascending=False)
     
-    plt.figure(figsize=(10, 6))
-    sector_buys.plot(kind='bar', color='skyblue', edgecolor='black')
-    plt.title('Total Buy Volume by Sector (2024H2 - 2025H1)')
-    plt.ylabel('Buy Volume (TWD)')
-    plt.xlabel('Sector')
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    plt.savefig('results_dir/sector_buy_volume.png')
-    plt.close()
+    set_plot_style()
+    plot_bar_chart(
+        labels=sector_buys.index,
+        values=sector_buys.values,
+        title='Total Buy Volume by Sector (2024H2 - 2025H1)',
+        xlabel='Sector',
+        ylabel='Buy Volume (TWD)',
+        output_path='results_dir/sector_buy_volume.png',
+        color='skyblue'
+    )
     print("[V] Saved: results_dir/sector_buy_volume.png")
     
     # 2. Sector Holding Count over time
@@ -60,17 +61,13 @@ def analyze_sectors(trades_file="results_dir/trades_ppo_eval.csv"):
     # Cumulative net position (approximation of exposure)
     daily_sector_net = daily_sector_net.pivot(index='step', columns='Sector', values='Net_Volume').fillna(0).cumsum()
     
-    plt.figure(figsize=(12, 6))
-    for col in daily_sector_net.columns:
-        plt.plot(daily_sector_net.index, daily_sector_net[col], label=col, alpha=0.8)
-    
-    plt.axhline(0, color='black', linewidth=1, linestyle='--')
-    plt.title('Approximated Cumulative Net Position by Sector (2024H2 - 2025H1)')
-    plt.ylabel('Net Position (TWD)')
-    plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
-    plt.tight_layout()
-    plt.savefig('results_dir/sector_net_position.png')
-    plt.close()
+    plot_multi_line_chart(
+        df=daily_sector_net,
+        title='Approximated Cumulative Net Position by Sector (2024H2 - 2025H1)',
+        ylabel='Net Position (TWD)',
+        output_path='results_dir/sector_net_position.png',
+        hline=0
+    )
     print("[V] Saved: results_dir/sector_net_position.png")
     
     # 3. Analyze Losers: Which stocks caused the most turnover/losses?

@@ -1,13 +1,19 @@
 import argparse
 import concurrent.futures
 import gc
+import json
+import logging
+import math
 import os
+import re
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from stable_baselines3.common.utils import set_random_seed
 
+from core.visualizations import plot_allocation_heatmap, plot_equity_curve, set_plot_style
 from metrics_utils import calculate_metrics
 from research_pipeline import (
     build_artifact_paths,
@@ -579,40 +585,48 @@ def plot_walk_forward(
     overall_metrics,
     overnight_feature_path=None,
 ):
+    set_plot_style()
     fig, axes = plt.subplots(2, 1, figsize=(14, 10))
     fig.suptitle(
         f"Walk-Forward Validation ({algo.upper()}, cash={cash_mode}, seed={seed})",
         fontsize=16,
+        fontweight="bold",
     )
 
-    axes[0].plot(
-        portfolio_history,
-        color="#1f77b4",
-        linewidth=2,
-        label=f"Portfolio ({overall_metrics['total_return'] * 100:+.2f}%)",
+    dates = list(range(len(portfolio_history)))
+    
+    # 1. Plot Equity Curve
+    plot_equity_curve(
+        dates=dates,
+        portfolio_values=portfolio_history,
+        title=f"Walk-Forward Out-of-Sample Portfolio Value ({overall_metrics['total_return'] * 100:+.2f}%)",
+        ax=axes[0]
     )
     axes[0].axhline(y=1_000_000, color="gray", linestyle="--", alpha=0.7)
     for name, idx in period_start_indices:
         axes[0].axvline(x=idx, color="red", linestyle=":", alpha=0.8)
         axes[0].text(idx + 1, 1_000_000 * 1.05, name, color="red", fontsize=10)
-    axes[0].set_title("Walk-Forward Out-of-Sample Portfolio Value", fontweight="bold")
-    axes[0].set_ylabel("Value (TWD)")
-    axes[0].legend()
-    axes[0].grid(True, linestyle="--", alpha=0.5)
 
+    # 2. Plot Allocation Heatmap
     if all_positions:
         pos_matrix = np.array(all_positions).T
         if all_cash_weights:
             pos_matrix = np.vstack([pos_matrix, np.array(all_cash_weights)])
-        stock_labels = [TICKER_NAMES.get(t, t) for t in tickers] + ["CASH"]
-        im = axes[1].imshow(pos_matrix, aspect="auto", cmap="RdBu", vmin=-1, vmax=1)
-        plt.colorbar(im, ax=axes[1], label="Weight")
-        axes[1].set_yticks(range(len(stock_labels)))
-        axes[1].set_yticklabels(stock_labels, fontsize=9)
-        axes[1].set_title("OOS Allocation Heatmap", fontweight="bold")
-        axes[1].set_xlabel("Trading Days")
+        stock_labels = [TICKER_NAMES.get(t, t) for t in tickers]
+        if all_cash_weights:
+            stock_labels.append("CASH")
+            
+        weights_df = pd.DataFrame(pos_matrix.T, columns=stock_labels)
+        
+        plot_allocation_heatmap(
+            weights_df=weights_df,
+            title="OOS Allocation Heatmap",
+            ax=axes[1]
+        )
+        
+        # Overlay period boundaries on heatmap
         for _, idx in period_start_indices:
-            axes[1].axvline(x=idx, color="black", linestyle=":", alpha=0.8)
+            axes[1].axvline(x=idx, color="white", linestyle=":", alpha=0.8)
 
     plt.tight_layout()
     feature_suffix = feature_suffix_from_path(overnight_feature_path)
@@ -620,6 +634,7 @@ def plot_walk_forward(
     plt.savefig(output_file, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"[OK] chart: {output_file}")
+
 
 
 def parse_args():

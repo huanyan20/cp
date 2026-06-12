@@ -67,7 +67,7 @@ class M1aPomdpObsTests(unittest.TestCase):
             obs, _, _, _, _ = env.step(rng.normal(size=env.action_space.shape).astype(np.float32))
 
         market_dim = env.window_size * env.num_market_features
-        rolling_vol, sortino_proxy, current_dd = env._compute_pomdp_features()
+        rolling_vol, sortino_proxy, current_dd = env._reward_calculator.compute_pomdp_features(env._current_drawdown())
         np.testing.assert_allclose(obs[0, market_dim + IDX_ROLLING_VOL], rolling_vol, atol=1e-7)
         np.testing.assert_allclose(obs[0, market_dim + IDX_ROLLING_SORTINO], sortino_proxy, atol=1e-7)
         np.testing.assert_allclose(obs[0, market_dim + IDX_CURRENT_DRAWDOWN], current_dd, atol=1e-7)
@@ -79,7 +79,7 @@ class M1aPomdpObsTests(unittest.TestCase):
         for _ in range(SHARPE_WINDOW + 5):
             env.step(rng.normal(size=env.action_space.shape).astype(np.float32))
 
-        arr = np.array(env._return_history, dtype=np.float64)
+        arr = np.array(env._reward_calculator._return_history, dtype=np.float64)
         mean_r = float(np.mean(arr))
         neg_returns = arr[arr < 0]
         downside_std = (
@@ -88,7 +88,7 @@ class M1aPomdpObsTests(unittest.TestCase):
             else float(np.std(arr) + 1e-8)
         )
         expected = float(_softsign(mean_r / downside_std))
-        _, sortino_proxy, _ = env._compute_pomdp_features()
+        _, sortino_proxy, _ = env._reward_calculator.compute_pomdp_features(env._current_drawdown())
         self.assertAlmostEqual(sortino_proxy, expected, places=7)
 
     def test_current_drawdown_can_differ_from_max_drawdown(self):
@@ -97,6 +97,7 @@ class M1aPomdpObsTests(unittest.TestCase):
         env._peak_value = env.initial_balance * 1.2
         env._portfolio_value = env.initial_balance * 1.1
         env._max_drawdown = 0.15
+        env._reward_calculator._pomdp_cache = None
 
         obs = env._get_observation()
         market_dim = env.window_size * env.num_market_features

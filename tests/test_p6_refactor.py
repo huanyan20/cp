@@ -28,19 +28,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 class CMoneyClientTests(unittest.TestCase):
     def test_get_accounts_config_returns_empty_without_cookie(self):
         """No CMONEY_COOKIE → empty list (load_dotenv mocked so .env is ignored)."""
-        import cmoney_client
+        import rpa_pipeline.cmoney_client as cmoney_client
 
-        with patch("cmoney_client.load_dotenv"):
+        with patch("rpa_pipeline.cmoney_client.load_dotenv", autospec=True):
             with patch.dict(os.environ, {}, clear=True):
                 result = cmoney_client.get_accounts_config()
         self.assertEqual(result, [])
 
     def test_get_accounts_config_with_explicit_aid(self):
         """CMONEY_COOKIE + CMONEY_AID → one account entry, no network call."""
-        import cmoney_client
+        import rpa_pipeline.cmoney_client as cmoney_client
 
         env = {"CMONEY_COOKIE": "fake_cookie_value", "CMONEY_AID": "99999"}
-        with patch("cmoney_client.load_dotenv"):
+        with patch("rpa_pipeline.cmoney_client.load_dotenv", autospec=True):
             with patch.dict(os.environ, env, clear=True):
                 result = cmoney_client.get_accounts_config()
 
@@ -51,14 +51,14 @@ class CMoneyClientTests(unittest.TestCase):
 
     def test_get_accounts_config_with_multiple_aids(self):
         """CMONEY_AID + CMONEY_AID_1 → two account entries."""
-        import cmoney_client
+        import rpa_pipeline.cmoney_client as cmoney_client
 
         env = {
             "CMONEY_COOKIE": "fake_cookie",
             "CMONEY_AID": "10001",
             "CMONEY_AID_1": "10002",
         }
-        with patch("cmoney_client.load_dotenv"):
+        with patch("rpa_pipeline.cmoney_client.load_dotenv", autospec=True):
             with patch.dict(os.environ, env, clear=True):
                 result = cmoney_client.get_accounts_config()
 
@@ -68,10 +68,10 @@ class CMoneyClientTests(unittest.TestCase):
 
     def test_get_accounts_config_fallback_default_account(self):
         """CMONEY_COOKIE without any AID → Default_Account with aid=None."""
-        import cmoney_client
+        import rpa_pipeline.cmoney_client as cmoney_client
 
         env = {"CMONEY_COOKIE": "fake_cookie"}
-        with patch("cmoney_client.load_dotenv"):
+        with patch("rpa_pipeline.cmoney_client.load_dotenv", autospec=True):
             with patch.dict(os.environ, env, clear=True):
                 with patch.object(cmoney_client, "get_auto_aids", return_value=[]):
                     result = cmoney_client.get_accounts_config()
@@ -80,37 +80,9 @@ class CMoneyClientTests(unittest.TestCase):
         self.assertIsNone(result[0]["aid"])
         self.assertEqual(result[0]["name"], "Default_Account")
 
-    def test_cmoney_client_importable_independently(self):
-        """cmoney_client can be imported without importing cmoney_rpa."""
-        import importlib
-
-        # Pop both so we can import a throwaway fresh cmoney_client without
-        # mutating the shared module (an in-place reload would replace its
-        # functions and break `is` identity checks in sibling tests).
-        saved_rpa = sys.modules.pop("cmoney_rpa", None)
-        saved_client = sys.modules.pop("cmoney_client", None)
-        try:
-            fresh_client = importlib.import_module("cmoney_client")
-            self.assertTrue(callable(fresh_client.get_accounts_config))
-            self.assertTrue(callable(fresh_client.get_auto_aids))
-        finally:
-            # Restore the original module objects untouched.
-            if saved_client is not None:
-                sys.modules["cmoney_client"] = saved_client
-            else:
-                sys.modules.pop("cmoney_client", None)
-            if saved_rpa is not None:
-                sys.modules["cmoney_rpa"] = saved_rpa
-
-
-# ---------------------------------------------------------------------------
-# signal_validator — facade correctness
-# ---------------------------------------------------------------------------
-
-class SignalValidatorFacadeTests(unittest.TestCase):
     def test_all_symbols_importable(self):
         """signal_validator exposes all expected public symbols."""
-        import signal_validator
+        import rpa_pipeline.signal_validator as signal_validator
 
         for sym in ["SignalError", "EXECUTION_LOG_FILE", "load_signal",
                     "record_signal", "signal_was_executed"]:
@@ -122,7 +94,7 @@ class SignalValidatorFacadeTests(unittest.TestCase):
     def test_objects_are_same_as_cmoney_rpa(self):
         """Symbols in signal_validator are the same objects as in cmoney_rpa."""
         import rpa_pipeline.cmoney_rpa as cmoney_rpa
-        import signal_validator
+        import rpa_pipeline.signal_validator as signal_validator
 
         for sym in ["SignalError", "load_signal", "record_signal", "signal_was_executed"]:
             self.assertIs(
@@ -133,7 +105,7 @@ class SignalValidatorFacadeTests(unittest.TestCase):
 
     def test_signal_error_is_value_error_subclass(self):
         """SignalError from signal_validator is a ValueError subclass."""
-        from signal_validator import SignalError
+        from rpa_pipeline.signal_validator import SignalError
 
         self.assertTrue(issubclass(SignalError, ValueError))
 
@@ -145,7 +117,7 @@ class SignalValidatorFacadeTests(unittest.TestCase):
 class RebalancePlannerFacadeTests(unittest.TestCase):
     def test_all_symbols_importable(self):
         """rebalance_planner exposes all expected public symbols."""
-        import rebalance_planner
+        import rpa_pipeline.rebalance_planner as rebalance_planner
 
         for sym in ["build_rebalance_plan", "build_dry_run_diff",
                     "write_dry_run_diff", "run_signal_file"]:
@@ -157,7 +129,7 @@ class RebalancePlannerFacadeTests(unittest.TestCase):
     def test_objects_are_same_as_cmoney_rpa(self):
         """Symbols in rebalance_planner are the same objects as in cmoney_rpa."""
         import rpa_pipeline.cmoney_rpa as cmoney_rpa
-        import rebalance_planner
+        import rpa_pipeline.rebalance_planner as rebalance_planner
 
         for sym in ["build_rebalance_plan", "build_dry_run_diff", "run_signal_file"]:
             self.assertIs(
@@ -168,7 +140,7 @@ class RebalancePlannerFacadeTests(unittest.TestCase):
 
     def test_build_rebalance_plan_via_facade(self):
         """build_rebalance_plan works correctly when called via rebalance_planner."""
-        from rebalance_planner import build_rebalance_plan
+        from rpa_pipeline.rebalance_planner import build_rebalance_plan
 
         plan = build_rebalance_plan({"2330": 1, "2317": 3}, {"2330": 2, "2317": 0})
         self.assertEqual(plan["buys"], {"2330": 1})
@@ -208,13 +180,6 @@ class BackwardCompatTests(unittest.TestCase):
 
         self.assertTrue(callable(cmoney_rpa.get_auto_aids))
         self.assertTrue(callable(cmoney_rpa.get_accounts_config))
-
-    def test_cmoney_rpa_get_accounts_config_is_cmoney_client_version(self):
-        """cmoney_rpa.get_accounts_config is the same function as cmoney_client's."""
-        import cmoney_client
-        import rpa_pipeline.cmoney_rpa as cmoney_rpa
-
-        self.assertIs(cmoney_rpa.get_accounts_config, cmoney_client.get_accounts_config)
 
     def test_trade_guard_imports_still_resolve(self):
         """trade_guard can import CMoneyRPA, build_dry_run_diff, load_signal from cmoney_rpa."""

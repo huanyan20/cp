@@ -14,7 +14,10 @@ from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from stable_baselines3 import PPO, SAC
+
+from core.visualizations import plot_allocation_heatmap, plot_equity_curve, set_plot_style
 
 from data_loader import fetch_multi_asset_data
 from metrics_utils import calculate_metrics
@@ -189,17 +192,19 @@ def run_eval(
     )
 
     # ── 繪圖 ────────────────────────────────────────────────────────
+    set_plot_style()
     fig, axes = plt.subplots(2, 1, figsize=(14, 10))
     fig.suptitle(
-        f"Portfolio Manager (GNN) Evaluation\n{TEST_START} ~ {TEST_END}", fontsize=14
+        f"Portfolio Manager (GNN) Evaluation\n{TEST_START} ~ {TEST_END}", fontsize=14, fontweight="bold"
     )
 
     # 1. 淨值曲線
-    axes[0].plot(
-        portfolio_history,
-        color="#1f77b4",
-        linewidth=2,
-        label=f"Portfolio ({total_ret:+.2f}%)",
+    dates = list(range(len(portfolio_history)))
+    plot_equity_curve(
+        dates=dates,
+        portfolio_values=portfolio_history,
+        title=f"Total Portfolio Value ({total_ret:+.2f}%)",
+        ax=axes[0]
     )
     axes[0].axhline(
         y=1_000_000, color="gray", linestyle="--", alpha=0.7, label="Initial capital 1M"
@@ -220,27 +225,28 @@ def run_eval(
         alpha=0.2,
         color="red",
     )
-    axes[0].set_title("Total Portfolio Value", fontweight="bold")
-    axes[0].set_ylabel("Value (TWD)")
     axes[0].legend()
-    axes[0].grid(True, linestyle="--", alpha=0.5)
 
     # 2. 資金輪動熱力圖
     if positions_history:
         pos_matrix = np.array(positions_history).T  # (N_stocks, Steps)
         if cash_history:
             pos_matrix = np.vstack([pos_matrix, np.array(cash_history)])
-        stock_labels = [TICKER_NAMES.get(t, t) for t in env.tickers] + ["CASH"]
-        im = axes[1].imshow(pos_matrix, aspect="auto", cmap="RdBu", vmin=-1, vmax=1)
-        plt.colorbar(im, ax=axes[1], label="Weight (Blue=Long / Red=Short)")
-        axes[1].set_yticks(range(len(env.tickers) + 1))
-        axes[1].set_yticklabels(stock_labels, fontsize=9)
-        axes[1].set_title("Capital Rotation & Allocation Heatmap", fontweight="bold")
-        axes[1].set_xlabel("Trading Days")
+        stock_labels = [TICKER_NAMES.get(t, t) for t in env.tickers]
+        if cash_history:
+            stock_labels.append("CASH")
+            
+        weights_df = pd.DataFrame(pos_matrix.T, columns=stock_labels)
+        plot_allocation_heatmap(
+            weights_df=weights_df,
+            title="Capital Rotation & Allocation Heatmap",
+            ax=axes[1]
+        )
 
     plt.tight_layout()
     plt.savefig(output_file, dpi=150, bbox_inches="tight")
     print(f"\n[V] 圖表已儲存：{output_file}")
+    plt.close(fig)
 
     # 播放完成提示音
     for _ in range(3):
@@ -348,39 +354,40 @@ def run_momentum_eval(
     print(f"[V] Signal JSON 已儲存為 {SETTINGS.paths.signal_path}: {weights_dict}")
 
     # 繪圖
+    set_plot_style()
     fig, axes = plt.subplots(2, 1, figsize=(14, 10))
     fig.suptitle(
         f"Momentum {lookback}D Top-{topk} Evaluation\n{TEST_START} ~ {TEST_END}",
-        fontsize=14,
+        fontsize=14, fontweight="bold"
     )
 
-    axes[0].plot(
-        portfolio_history,
-        color="#1f77b4",
-        linewidth=2,
-        label=f"Portfolio ({total_ret:+.2f}%)",
+    dates = list(range(len(portfolio_history)))
+    plot_equity_curve(
+        dates=dates,
+        portfolio_values=portfolio_history,
+        title=f"Total Portfolio Value ({total_ret:+.2f}%)",
+        ax=axes[0]
     )
     axes[0].axhline(
         y=1_000_000, color="gray", linestyle="--", alpha=0.7, label="Initial capital 1M"
     )
-    axes[0].set_title("Total Portfolio Value", fontweight="bold")
-    axes[0].set_ylabel("Value (TWD)")
     axes[0].legend()
-    axes[0].grid(True, linestyle="--", alpha=0.5)
 
     if positions_history:
         pos_matrix = np.array(positions_history).T
         stock_labels = [TICKER_NAMES.get(t, t) for t in env.tickers]
-        im = axes[1].imshow(pos_matrix, aspect="auto", cmap="RdBu", vmin=-1, vmax=1)
-        plt.colorbar(im, ax=axes[1], label="Weight (Blue=Long / Red=Short)")
-        axes[1].set_yticks(range(len(env.tickers)))
-        axes[1].set_yticklabels(stock_labels, fontsize=9)
-        axes[1].set_title("Capital Rotation & Allocation Heatmap", fontweight="bold")
-        axes[1].set_xlabel("Trading Days")
+        weights_df = pd.DataFrame(pos_matrix.T, columns=stock_labels)
+        
+        plot_allocation_heatmap(
+            weights_df=weights_df,
+            title="Capital Rotation & Allocation Heatmap",
+            ax=axes[1]
+        )
 
     plt.tight_layout()
     plt.savefig(output_file, dpi=150, bbox_inches="tight")
     print(f"\n[V] 圖表已儲存：{output_file}")
+    plt.close(fig)
 
 
 if __name__ == "__main__":

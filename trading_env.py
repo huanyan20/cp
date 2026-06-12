@@ -167,9 +167,10 @@ class TaiwanStockEnv(gym.Env):
             enable_cash_action=self.enable_cash_action,
             enable_margin_short=self.enable_margin_short,
             enable_sl_features=self.enable_sl_features,
+            num_sl_features=self._NUM_SL_FEATURES,
         )
 
-        self._obs_dim_per_stock = self._observation_builder.obs_dim_per_stock + self._NUM_SL_FEATURES
+        self._obs_dim_per_stock = self._observation_builder.obs_dim_per_stock
 
         action_dim = self.num_stocks + 1 if self.enable_cash_action else self.num_stocks
         self.action_space = spaces.Box(

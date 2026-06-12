@@ -106,7 +106,7 @@ class NumpyEquivalenceTests(unittest.TestCase):
         account = obs[:, market_dim : market_dim + NUM_ACCOUNT_FEATURES]
 
         total_ret = (env._portfolio_value - env.initial_balance) / env.initial_balance
-        rolling_vol, sortino_proxy, current_dd = env._compute_pomdp_features()
+        rolling_vol, sortino_proxy, current_dd = env._reward_calculator.compute_pomdp_features(env._current_drawdown())
         for i in range(env.num_stocks):
             expected = np.array(
                 [
