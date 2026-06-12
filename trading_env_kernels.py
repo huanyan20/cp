@@ -135,7 +135,10 @@ def compute_reward_kernel(
     regime_dd_threshold: float,
     regime_penalty_coef: float,
     lambda_cash_defensive: float,
+    whipsaw_penalty: float,
+    lambda_whipsaw: float,
 ) -> float:
+    import math
     def softsign(x: float) -> float:
         return x / (1.0 + abs(x))
 
@@ -160,9 +163,15 @@ def compute_reward_kernel(
             hybrid_reward = return_component
 
     cost_p = lambda_cost * trade_cost
-    turnover_p = lambda_turnover * (last_turnover / 2.0)
+    
+    if last_turnover <= 0.3:
+        turnover_p = lambda_turnover * 2.0 * (last_turnover ** 3)
+    else:
+        turnover_p = lambda_turnover * (0.054 + 0.54 * (last_turnover - 0.3))
+        
     cash_p = lambda_cash * cash_ratio
     drawdown_p = lambda_drawdown * max(0.0, raw_dd - reward_ref_dd)
+    whipsaw_p = lambda_whipsaw * whipsaw_penalty
 
     regime_penalty = 0.0
     if raw_dd > regime_dd_threshold and not enable_margin_short:
@@ -182,6 +191,7 @@ def compute_reward_kernel(
         hybrid_reward
         - cost_p - turnover_p - cash_p
         - drawdown_p - regime_penalty
+        - whipsaw_p
         + cash_defensive_bonus
     )
-    return max(-1.0, min(1.0, raw))
+    return max(-5.0, min(5.0, raw))

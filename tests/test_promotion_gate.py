@@ -139,7 +139,7 @@ class PromotionGateTests(unittest.TestCase):
         """Test baseline gate when model beats baselines."""
         baseline_summary = {
             "buy_and_hold": {"total_return": 0.10, "sharpe": 0.5},
-            "^TWII": {"total_return": 0.08, "sharpe": 0.4},
+            "Semi_2x": {"total_return": 0.08, "sharpe": 0.4},
             "0050": {"total_return": 0.12, "sharpe": 0.6},
         }
         gate = check_baseline_gate(self.good_summary, baseline_summary)

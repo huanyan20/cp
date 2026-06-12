@@ -202,16 +202,28 @@ def run_baseline(
     }
 
     benchmarks = {
-        "^TWII": ("^TWII", "Taiwan Weighted Index"),
+        "Semi_2x": ("Semi_2x", "2x Leveraged CTBC Semiconductor ETF (00891.TW * 2)"),
         "0050": ("0050.TW", "Taiwan 50 ETF (元大台灣50)"),
         "buy_and_hold": ("0050.TW", "buy-and-hold proxy via 0050.TW (equal-weight tech30 approximation)"),
     }
 
     for key, (ticker, description) in benchmarks.items():
         try:
-            raw = yf.download(ticker, start=start_date, end=end_date, progress=False)
-            close = raw["Close"].squeeze()
-            metrics = _price_series_metrics(close)
+            if ticker == "Semi_2x":
+                raw = yf.download("00891.TW", start=start_date, end=end_date, progress=False)
+                close = raw["Close"].squeeze()
+                daily_rets = close.pct_change().dropna()
+                lev_rets = daily_rets * 2.0
+                prices = (1 + lev_rets).cumprod()
+                # Use close.index for prices but need to insert the initial value
+                prices.loc[close.index[0]] = 1.0
+                prices = prices.sort_index()
+                metrics = _price_series_metrics(prices)
+            else:
+                raw = yf.download(ticker, start=start_date, end=end_date, progress=False)
+                close = raw["Close"].squeeze()
+                metrics = _price_series_metrics(close)
+
             metrics["description"] = description
             result[key] = metrics
             print(f"[baseline] {key}: total_return={metrics['total_return']:.2%}")

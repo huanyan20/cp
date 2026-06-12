@@ -8,9 +8,13 @@ evaluate_portfolio.py - 評估 Portfolio Manager 的績效與資金輪動
 import argparse
 import json
 import os
+import sys
+from pathlib import Path
 import time
 import winsound
 from datetime import datetime
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -37,10 +41,11 @@ def _signal_aid(default: str = "2249294") -> str:
 
 def run_eval(
     model_path: str,
-    tickers: list,
+    tickers: list[str],
     output_file: str = "portfolio_evaluation.png",
     overnight_feature_path: str | None = None,
     half_buys: bool = False,
+    enable_cash_action_override: bool = None,
 ):
     print(f"=== 下載驗證資料 ({TEST_START} ~ {TEST_END}) ===")
     enriched = fetch_multi_asset_data(
@@ -53,7 +58,10 @@ def run_eval(
     )
 
     model_name_lower = model_path.lower()
-    enable_cash_action = "cash" in model_name_lower or "sac" in model_name_lower
+    if enable_cash_action_override is not None:
+        enable_cash_action = enable_cash_action_override
+    else:
+        enable_cash_action = "cash" in model_name_lower or "sac" in model_name_lower
     enable_margin_short = "ls" in model_name_lower
     env = TaiwanStockEnv(
         df_dict=enriched,
@@ -407,6 +415,16 @@ if __name__ == "__main__":
         action="store_true",
         help="Halve the target weights and increase cash weight for risk control.",
     )
+    parser.add_argument(
+        "--enable-cash-action",
+        action="store_true",
+        help="Model was trained with cash action enabled.",
+    )
+    parser.add_argument(
+        "--disable-cash-action",
+        action="store_true",
+        help="Model was trained with cash action disabled.",
+    )
     parser.add_argument("--test-start", default=SETTINGS.evaluation.test_start)
     parser.add_argument(
         "--test-end",
@@ -418,6 +436,12 @@ if __name__ == "__main__":
     TEST_START = args.test_start
     TEST_END = args.test_end
 
+    override_cash = None
+    if args.enable_cash_action:
+        override_cash = True
+    elif args.disable_cash_action:
+        override_cash = False
+
     # 執行模型評估
     run_eval(
         model_path=args.model_path,
@@ -425,4 +449,5 @@ if __name__ == "__main__":
         output_file=args.output_file,
         overnight_feature_path=args.overnight_feature_path,
         half_buys=args.half_buys,
+        enable_cash_action_override=override_cash,
     )

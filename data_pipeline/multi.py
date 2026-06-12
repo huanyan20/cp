@@ -43,6 +43,11 @@ def fetch_multi_asset_data(
                     m_tick, start_date=start_date, end_date=end_date, window_size=window_size
                 )
                 m_df = m_df.add_prefix(f"macro_{m_tick}_")
+                
+                # [FIX] Strict Point-in-Time alignment for foreign indices (prevent future leakage)
+                if m_tick != "^TWII":
+                    m_df = m_df.shift(1)
+                    
                 macro_dfs[m_tick] = m_df
             except Exception as e:
                 print(f"[!] 大盤 {m_tick} 下載失敗，跳過：{e}")

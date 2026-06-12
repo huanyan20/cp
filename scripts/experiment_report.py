@@ -40,7 +40,7 @@ METRICS = [
 
 BASELINE_METRICS = [
     "buy_and_hold",
-    "^TWII",
+    "Semi_2x",
     "0050",
 ]
 
@@ -606,7 +606,7 @@ def generate_report(
     if baseline_summary:
         md += "- Baseline summary loaded and included in promotion review.\n"
     else:
-        md += "- Baseline summary missing; add buy-and-hold, `^TWII`, and `0050` comparisons before promotion.\n"
+        md += "- Baseline summary missing; add buy-and-hold, `Semi_2x`, and `0050` comparisons before promotion.\n"
     if ablation_summary:
         md += "- Feature ablation summary loaded and included in promotion review.\n"
     else:

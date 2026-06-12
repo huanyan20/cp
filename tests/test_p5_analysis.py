@@ -356,7 +356,7 @@ class BaselineTests(unittest.TestCase):
             p5_analysis.run_baseline(str(self.tmp), str(out))
 
         result = json.loads(out.read_text(encoding="utf-8"))
-        for key in ("buy_and_hold", "^TWII", "0050"):
+        for key in ("buy_and_hold", "Semi_2x", "0050"):
             self.assertIn(key, result, msg=f"Missing key: {key}")
             self.assertIn("total_return", result[key])
             self.assertIn("description", result[key])

@@ -167,7 +167,7 @@ class SignalGeneratorTests(unittest.TestCase):
 
         with (
             patch("sl_pipeline.walk_forward_sl.fetch_multi_asset_data", side_effect=fake_fetch),
-            patch("sl_pipeline.walk_forward_sl.TICKERS_TECH_EXPANDED", tickers),
+            patch("sl_pipeline.walk_forward_sl.get_universe_builder", return_value=type("MockBuilder", (), {"build_universe": lambda self, d, top_n=50: tickers})()),
         ):
             from sl_pipeline.walk_forward_sl import run_single_period
 
@@ -315,7 +315,7 @@ class SlBacktestTests(unittest.TestCase):
 
         with (
             patch("sl_pipeline.walk_forward_sl.fetch_multi_asset_data", side_effect=fake_fetch),
-            patch("sl_pipeline.walk_forward_sl.TICKERS_TECH_EXPANDED", tickers),
+            patch("sl_pipeline.walk_forward_sl.get_universe_builder", return_value=type("MockBuilder", (), {"build_universe": lambda self, d, top_n=50: tickers})()),
         ):
             from sl_pipeline.walk_forward_sl import run_single_period
 

@@ -9,7 +9,7 @@ from typing import Any
 import trading_env
 
 # Bump manually when reward / regime logic changes intentionally (e.g. r4, r5).
-ENV_CONFIG_VERSION = "r5.1"
+ENV_CONFIG_VERSION = "r5.2"
 
 
 def build_env_config_snapshot(
@@ -33,6 +33,8 @@ def build_env_config_snapshot(
         "lambda_cash": trading_env.LAMBDA_CASH,
         "lambda_drawdown": trading_env.LAMBDA_DRAWDOWN,
         "lambda_cash_defensive": trading_env.LAMBDA_CASH_DEFENSIVE,
+        "lambda_whipsaw": trading_env.LAMBDA_WHIPSAW,
+        "action_deadband": trading_env.ACTION_DEADBAND,
         "reward_ref_dd": trading_env.REWARD_REF_DD,
         "regime_dd_threshold": trading_env.REGIME_DD_THRESHOLD,
         "regime_penalty_coef": trading_env.REGIME_PENALTY_COEF,

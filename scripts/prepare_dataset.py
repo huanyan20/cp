@@ -17,7 +17,8 @@ import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from data_loader import fetch_multi_asset_data
-from stock_universe import TICKERS_TECH_EXPANDED, MACRO_TICKERS_RL
+from data_pipeline.universe_builder import get_universe_builder
+from stock_universe import MACRO_TICKERS_RL
 from settings import load_settings
 
 def prepare_and_save_dataset(
@@ -92,8 +93,11 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
+    builder = get_universe_builder("dynamic")
+    dynamic_tickers = builder.build_universe(args.start, top_n=45)
+    
     prepare_and_save_dataset(
-        tickers=TICKERS_TECH_EXPANDED,
+        tickers=dynamic_tickers,
         macro_tickers=MACRO_TICKERS_RL,
         start_date=args.start,
         end_date=args.end,

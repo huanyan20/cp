@@ -100,7 +100,7 @@ def test_promotion_gate_workflow():
 
     baseline_summary = {
         "buy_and_hold": {"total_return": 0.12, "sharpe": 0.5},
-        "^TWII": {"total_return": 0.10, "sharpe": 0.45},
+        "Semi_2x": {"total_return": 0.10, "sharpe": 0.45},
         "0050": {"total_return": 0.14, "sharpe": 0.55},
     }
 

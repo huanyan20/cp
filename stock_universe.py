@@ -3,6 +3,8 @@ stock_universe.py - 定義台股交易池與總體經濟指標
 """
 
 # 45 檔科技股 (Tech30 Expanded Edition)
+# DEPRECATED: 為了消除存活者偏差，已改用 data_pipeline/universe_builder.py 動態產生名單。
+# 此名單僅保留供尚未升級的舊回測腳本使用。
 TICKERS_TECH_EXPANDED = [
     # 半導體 / IC 設計 / 晶圓 / 封測
     "2330.TW",

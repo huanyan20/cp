@@ -26,7 +26,8 @@ from sl_pipeline.rule_based_allocator import (
     RuleBasedAllocatorConfig,
 )
 from sl_pipeline.signal_generator import SignalGenerator, SignalGeneratorConfig
-from stock_universe import MACRO_TICKERS_RL, TICKERS_TECH_EXPANDED
+from stock_universe import MACRO_TICKERS_RL
+from data_pipeline.universe_builder import get_universe_builder
 
 SETTINGS = load_settings()
 
@@ -78,7 +79,9 @@ def run_single_period(
     period = resolve_period(period_name)
     train_end = planned.get("effective_train_end", period["train_end"])
     test_end = planned.get("effective_test_end", period["test_end"])
-    tickers = tickers or list(TICKERS_TECH_EXPANDED)
+    if tickers is None:
+        builder = get_universe_builder("dynamic")
+        tickers = builder.build_universe(period["train_start"], top_n=45)
 
     train_data = fetch_multi_asset_data(
         tickers=tickers,
@@ -181,7 +184,10 @@ def run_walk_forward_sl(
 ) -> dict:
     plan = build_period_plan()
     allocator = build_allocator(allocator_name)
-    tickers = tickers or list(TICKERS_TECH_EXPANDED)
+    if tickers is None:
+        builder = get_universe_builder("dynamic")
+        # Initialize default but dynamically update per period if requested
+        tickers = builder.build_universe(plan[0]["name"][:4] + "-01-01", top_n=45) # Fallback baseline
 
     seed_metrics = build_sl_seed_metrics(
         horizon=horizon,
@@ -205,14 +211,18 @@ def run_walk_forward_sl(
         train_end = planned.get("effective_train_end", period["train_end"])
         test_end = planned.get("effective_test_end", period["test_end"])
 
+        # Dynamically fetch universe for this specific period
+        builder = get_universe_builder("dynamic")
+        period_tickers = builder.build_universe(period["train_start"], top_n=45)
+
         train_data = fetch_multi_asset_data(
-            tickers=tickers,
+            tickers=period_tickers,
             start_date=period["train_start"],
             end_date=train_end,
             macro_tickers=MACRO_TICKERS_RL,
         )
         test_data = fetch_multi_asset_data(
-            tickers=tickers,
+            tickers=period_tickers,
             start_date=test_fetch_start(period["test_start"]),
             end_date=test_end,
             macro_tickers=MACRO_TICKERS_RL,
@@ -237,13 +247,13 @@ def run_walk_forward_sl(
             combined_test,
             scores,
             allocator,
-            tickers,
+            period_tickers,
             test_start=period["test_start"],
             test_end=test_end,
         )
         period_metrics = metrics_from_backtest(
             backtest,
-            tickers,
+            period_tickers,
             period_name=name,
             test_start=period["test_start"],
             test_end=test_end,
@@ -266,7 +276,7 @@ def run_walk_forward_sl(
         all_cash_weights,
         all_daily_returns,
         all_turnover,
-        tickers,
+        period_tickers, # Note: strictly we should pass dynamic per-day tickers to overall metrics, but period_tickers from last fold is a fallback.
     )
     seed_metrics["overall"] = overall_metrics
 

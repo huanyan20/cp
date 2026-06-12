@@ -23,6 +23,7 @@ LAMBDA_CASH_DEFENSIVE = 0.35
 REWARD_REF_DD = 0.02
 REGIME_DD_THRESHOLD = 0.06
 REGIME_PENALTY_COEF = 1.5
+LAMBDA_WHIPSAW = 0.05
 
 class RewardCalculator:
     def __init__(
@@ -89,6 +90,7 @@ class RewardCalculator:
         cash_weight: float,
         last_turnover: float,
         current_dd: float,
+        whipsaw_penalty: float = 0.0,
     ) -> float:
         log_r = float(np.log(max(curr_value, 1e-8) / max(prev_value, 1e-8)))
         
@@ -127,6 +129,8 @@ class RewardCalculator:
                 REGIME_DD_THRESHOLD,
                 REGIME_PENALTY_COEF,
                 LAMBDA_CASH_DEFENSIVE,
+                float(whipsaw_penalty),
+                LAMBDA_WHIPSAW,
             )
 
         # Fallback pure-Python path
@@ -150,9 +154,15 @@ class RewardCalculator:
                 hybrid_reward = return_component
 
         cost_p = LAMBDA_COST * trade_cost
-        turnover_p = LAMBDA_TURNOVER * (last_turnover / 2.0)
+        
+        if last_turnover <= 0.3:
+            turnover_p = LAMBDA_TURNOVER * 2.0 * (last_turnover ** 3)
+        else:
+            turnover_p = LAMBDA_TURNOVER * (0.054 + 0.54 * (last_turnover - 0.3))
+            
         cash_p = LAMBDA_CASH * cash_ratio
         drawdown_p = LAMBDA_DRAWDOWN * max(0.0, raw_dd - REWARD_REF_DD)
+        whipsaw_p = LAMBDA_WHIPSAW * whipsaw_penalty
         
         regime_penalty = 0.0
         if raw_dd > REGIME_DD_THRESHOLD and not self.enable_margin_short:
@@ -172,6 +182,6 @@ class RewardCalculator:
             
         return float(np.clip(
             hybrid_reward - cost_p - turnover_p - cash_p
-            - drawdown_p - regime_penalty + cash_defensive_bonus,
-            -1.0, 1.0,
+            - drawdown_p - regime_penalty - whipsaw_p + cash_defensive_bonus,
+            -5.0, 5.0,
         ))

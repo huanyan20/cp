@@ -35,7 +35,8 @@ from settings import (
     resolve_tier,
     resolve_torch_device,
 )
-from stock_universe import MACRO_TICKERS_RL, TICKER_NAMES, TICKERS_TECH_EXPANDED
+from stock_universe import MACRO_TICKERS_RL, TICKER_NAMES
+from data_pipeline.universe_builder import get_universe_builder
 
 SETTINGS = load_settings()
 
@@ -321,7 +322,10 @@ def _run_single_walk_forward(
     npz_path: str | None = None,
 ):
     os.makedirs(RESULTS_DIR, exist_ok=True)
-    tickers = TICKERS_TECH_EXPANDED
+    builder = get_universe_builder("dynamic")
+    # For NPZ path, tickers are fixed in the file. But we still need a default list
+    # for overall metrics if not dynamically fetching.
+    all_seen_tickers = set()
     cash_mode = cash_mode_name(enable_cash_action)
     periods = build_period_plan()
 
@@ -394,6 +398,10 @@ def _run_single_walk_forward(
         if period.get("was_clamped"):
             print("  Note: period end was clamped to available calendar date.")
 
+        # Dynamically fetch universe for this specific period
+        period_tickers = builder.build_universe(period["train_start"], top_n=45)
+        all_seen_tickers.update(period_tickers)
+
         sl_scores = None
         enable_sl_features = False
         if sl_scores_dir:
@@ -427,7 +435,7 @@ def _run_single_walk_forward(
                 train_env = base_train_env
             else:
                 train_env, _ = build_train_env(
-                    tickers=tickers,
+                    tickers=period_tickers,
                     train_start=period["train_start"],
                     train_end=train_end,
                     window_size=WINDOW_SIZE,
@@ -454,7 +462,7 @@ def _run_single_walk_forward(
             test_env = base_test_env
         else:
             test_env, _ = build_eval_env(
-                tickers=tickers,
+                tickers=period_tickers,
                 test_start=test_start,
                 test_end=test_end,
                 window_size=WINDOW_SIZE,
@@ -488,7 +496,7 @@ def _run_single_walk_forward(
             cash_mode=cash_mode,
             seed=seed,
             feature_suffix=feature_suffix,
-            tickers=tickers,
+            tickers=period_tickers,
             test_start=test_start,
             test_end=test_end,
             eval_results=eval_results,
@@ -543,7 +551,7 @@ def _run_single_walk_forward(
         all_cash_weights,
         all_daily_returns,
         all_turnover,
-        tickers,
+        list(all_seen_tickers),
     )
     seed_metrics["overall"] = overall_metrics
 
@@ -567,7 +575,7 @@ def _run_single_walk_forward(
         all_positions,
         all_cash_weights,
         period_start_indices,
-        tickers,
+        list(all_seen_tickers),
         overall_metrics,
         overnight_feature_path,
     )

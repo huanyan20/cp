@@ -8,6 +8,7 @@ from settings import resolve_torch_device, describe_torch_device, SETTINGS
 from trading_env import NUM_ACCOUNT_FEATURES
 from indexed_replay_buffer import IndexedReplayBuffer, estimated_bytes_per_transition
 
+
 class EntCoefScheduleCallback(BaseCallback):
     """Linear entropy coefficient annealing for PPO experiments."""
 
@@ -68,7 +69,9 @@ class ModelTrainer:
         temporal_extractor: bool = False,
         window_size: int = 20,
     ):
-        policy_kwargs = build_policy_kwargs(temporal_extractor=temporal_extractor, window_size=window_size)
+        policy_kwargs = build_policy_kwargs(
+            temporal_extractor=temporal_extractor, window_size=window_size
+        )
 
         if self.algo == "ppo":
             model = PPO(
@@ -77,8 +80,8 @@ class ModelTrainer:
                 verbose=1,
                 device=self.device,
                 learning_rate=3e-5,
-                n_steps=4096,
-                batch_size=2048,
+                n_steps=8192,
+                batch_size=4096,
                 n_epochs=10,
                 gamma=0.99,
                 gae_lambda=0.95,
@@ -86,6 +89,7 @@ class ModelTrainer:
                 target_kl=0.04,
                 ent_coef=0.05,
                 policy_kwargs=policy_kwargs,
+                tensorboard_log="logs/tb_logs",
             )
             callback = EntCoefScheduleCallback(
                 ent_coef_start=0.05,
@@ -131,10 +135,10 @@ class ModelTrainer:
                     env=env,
                     storage_dtype=np.float16,
                 ),
+                tensorboard_log="logs/tb_logs",
             )
             return model, None
 
     def load_model(self, model_path: str, env):
         model_class = PPO if self.algo == "ppo" else SAC
         return model_class.load(model_path, env=env, device=self.device)
-

@@ -281,7 +281,7 @@ def check_baseline_gate(
     Returns:
         PromotionGate with check result
     """
-    baseline_names = baseline_names or ["buy_and_hold", "^TWII", "0050"]
+    baseline_names = baseline_names or ["buy_and_hold", "Semi_2x", "0050"]
 
     if not baseline_summary:
         return PromotionGate(

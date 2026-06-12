@@ -130,7 +130,7 @@ class ExperimentReportTests(unittest.TestCase):
                 "baseline_summary.json",
                 {
                     "buy_and_hold": {"total_return": 0.10, "sharpe": 0.5},
-                    "^TWII": {"total_return": 0.08, "sharpe": 0.4},
+                    "Semi_2x": {"total_return": 0.08, "sharpe": 0.4},
                     "0050": {"total_return": 0.09, "sharpe": 0.45},
                 },
             )

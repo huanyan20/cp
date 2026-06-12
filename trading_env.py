@@ -33,6 +33,8 @@ LAMBDA_CASH_DEFENSIVE = 0.35  # R5: 0.2 → 0.35 — reward defensive cash earli
 REWARD_REF_DD = 0.02        # R5: 3% → 2% buffer — penalty kicks in sooner
 REGIME_DD_THRESHOLD = 0.06  # R5: 8% → 6% — regime exposure penalty earlier
 REGIME_PENALTY_COEF = 1.5   # R5: 1.0 → 1.5 — heavier stock exposure during DD
+LAMBDA_WHIPSAW = 0.05
+ACTION_DEADBAND = 0.02
 SHARPE_WINDOW = 20
 MIN_TOP_K_WEIGHT = 0.05  # M1c: floor per active top-k stock before re-normalize
 _BENCHMARK_TOPK = 3
@@ -227,6 +229,15 @@ class TaiwanStockEnv(gym.Env):
 
     def step(self, action: np.ndarray, bypass_action_transform: bool = False):
         target_positions = self._transform_action(action, bypass_action_transform)
+        
+        # Calculate Whipsaw Penalty: Selling when holding period is less than 3 days
+        whipsaw_penalty = 0.0
+        for i in range(self.num_stocks):
+            if target_positions[i] < self._positions[i]:
+                if self._holding_periods[i] > 0:
+                    days_held = float(self._holding_periods[i])
+                    whipsaw_penalty += float(self._positions[i] - target_positions[i]) * max(0.0, 3.0 - days_held)
+                    
         trade_cost = self._execute_trades(target_positions)
 
         benchmark_top3_idx = None
@@ -256,7 +267,9 @@ class TaiwanStockEnv(gym.Env):
         # NOTE: _pomdp_cache is set inside _compute_reward() AFTER appending
         # log_r to return_history (so sortino is fresh). _get_observation then
         # reads the cache without recomputing.
-        reward = self._compute_reward(prev_value, self._portfolio_value, trade_cost)
+        reward = self._compute_reward(
+            prev_value, self._portfolio_value, trade_cost, whipsaw_penalty
+        )
 
         self._holding_periods = np.where(
             np.abs(self._positions) > 0.01, self._holding_periods + 1, 0
@@ -297,6 +310,25 @@ class TaiwanStockEnv(gym.Env):
         self._reward_calculator.reset_state()
 
     def _transform_action(
+        self, action: np.ndarray, bypass_action_transform: bool = False
+    ) -> np.ndarray:
+        target_positions = self._raw_transform_action(action, bypass_action_transform)
+        
+        # Apply Action Deadband
+        weight_diff = np.abs(target_positions - self._positions)
+        target_positions = np.where(weight_diff < ACTION_DEADBAND, self._positions, target_positions)
+        
+        # Recalculate cash_weight consistently based on actual target_positions
+        if self.enable_margin_short:
+            self._cash_weight = 1.0 - float(np.sum(target_positions))
+        elif self.enable_cash_action:
+            self._cash_weight = max(0.0, 1.0 - float(np.sum(target_positions)))
+        else:
+            self._cash_weight = 0.0
+            
+        return target_positions.astype(np.float32)
+
+    def _raw_transform_action(
         self, action: np.ndarray, bypass_action_transform: bool = False
     ) -> np.ndarray:
         action = np.asarray(action, dtype=np.float32).reshape(-1)
@@ -483,12 +515,13 @@ class TaiwanStockEnv(gym.Env):
         )
 
     def _compute_reward(
-        self, prev_value: float, curr_value: float, trade_cost: float
+        self, prev_value: float, curr_value: float, trade_cost: float, whipsaw_penalty: float
     ) -> float:
         return self._reward_calculator.compute_reward(
             prev_value=prev_value,
             curr_value=curr_value,
             trade_cost=trade_cost,
+            whipsaw_penalty=whipsaw_penalty,
             benchmark_log_r=self._benchmark_log_r,
             positions=self._positions,
             cash_weight=self._cash_weight,
