@@ -91,6 +91,7 @@ def run_research_matrix(
     overnight_feature_path: str | None = None,
     temporal_extractor: bool = False,
     sl_scores_dir: str | None = None,
+    npz_path: str | None = None,
 ):
     algos = algos or ["ppo", "sac"]
     cash_modes = cash_modes or [True, False]
@@ -121,6 +122,7 @@ def run_research_matrix(
                 temporal_extractor,
                 overwrite,
                 sl_scores_dir,
+                npz_path,
             )
     else:
         print(f"Starting multiprocessing with {max_workers} workers for {len(pending_tasks)} tasks...")
@@ -139,6 +141,7 @@ def run_research_matrix(
                         temporal_extractor,
                         overwrite,
                         sl_scores_dir,
+                        npz_path,
                     )
                 )
             for future in concurrent.futures.as_completed(futures):
@@ -201,6 +204,7 @@ def run_candidate_set(
                 temporal_extractor,
                 overwrite,
                 sl_scores_dir,
+                npz_path,
             )
     else:
         print(f"Starting multiprocessing with {max_workers} workers for {len(pending)} tasks...")
@@ -219,6 +223,7 @@ def run_candidate_set(
                         temporal_extractor,
                         overwrite,
                         sl_scores_dir,
+                        npz_path,
                     )
                 )
             for future in concurrent.futures.as_completed(futures):
@@ -239,6 +244,7 @@ def run_walk_forward(
     overnight_feature_path: str | None = None,
     temporal_extractor: bool = False,
     sl_scores_dir: str | None = None,
+    npz_path: str | None = None,
 ):
     seeds = seeds or DEFAULT_SEEDS
     pending_tasks = build_pending_walk_forward_tasks(
@@ -267,6 +273,7 @@ def run_walk_forward(
                 temporal_extractor,
                 overwrite,
                 sl_scores_dir,
+                npz_path,
             )
     else:
         print(f"Starting multiprocessing with {max_workers} workers for {len(pending_seeds)} tasks...")
@@ -285,6 +292,7 @@ def run_walk_forward(
                         temporal_extractor,
                         overwrite,
                         sl_scores_dir,
+                        npz_path,
                     )
                 )
             for future in concurrent.futures.as_completed(futures):
@@ -304,6 +312,7 @@ def _run_single_walk_forward(
     temporal_extractor: bool = False,
     overwrite: bool = False,
     sl_scores_dir: str | None = None,
+    npz_path: str | None = None,
 ):
     os.makedirs(RESULTS_DIR, exist_ok=True)
     tickers = TICKERS_TECH_EXPANDED
@@ -333,6 +342,34 @@ def _run_single_walk_forward(
         timesteps=timesteps,
         settings=SETTINGS,
     )
+
+    base_train_env = None
+    base_test_env = None
+    if npz_path and os.path.exists(npz_path):
+        from trading_env import TaiwanStockEnv
+        print("  [Init] Loading Full Dataset from NPZ for Continuous Rolling...")
+        base_train_env = TaiwanStockEnv(
+            npz_path=npz_path,
+            window_size=WINDOW_SIZE,
+            topk=SETTINGS.research.default_topk,
+            softmax_temp=SETTINGS.research.default_softmax_temp,
+            use_benchmark_reward=True,
+            enable_cash_action=enable_cash_action,
+            enable_margin_short=enable_margin_short,
+            max_leverage=SETTINGS.risk_limits.max_leverage,
+            record_trades=False,
+        )
+        base_test_env = TaiwanStockEnv(
+            npz_path=npz_path,
+            window_size=WINDOW_SIZE,
+            topk=SETTINGS.research.default_topk,
+            softmax_temp=SETTINGS.research.default_softmax_temp,
+            use_benchmark_reward=True,
+            enable_cash_action=enable_cash_action,
+            enable_margin_short=enable_margin_short,
+            max_leverage=SETTINGS.risk_limits.max_leverage,
+            record_trades=True,
+        )
 
     for i, period in enumerate(periods):
         name = period["name"]
@@ -379,19 +416,23 @@ def _run_single_walk_forward(
             print(f"  Resume: found existing model, skip training: {model_path}.zip")
         else:
             # Build training environment only when this period still needs training.
-            train_env, _ = build_train_env(
-                tickers=tickers,
-                train_start=period["train_start"],
-                train_end=train_end,
-                window_size=WINDOW_SIZE,
-                macro_tickers=MACRO_TICKERS_RL,
-                settings=SETTINGS,
-                enable_cash_action=enable_cash_action,
-                enable_margin_short=enable_margin_short,
-                overnight_feature_path=overnight_feature_path,
-                enable_sl_features=enable_sl_features,
-                sl_scores=sl_scores,
-            )
+            if base_train_env is not None:
+                base_train_env.set_time_window(period["train_start"], train_end)
+                train_env = base_train_env
+            else:
+                train_env, _ = build_train_env(
+                    tickers=tickers,
+                    train_start=period["train_start"],
+                    train_end=train_end,
+                    window_size=WINDOW_SIZE,
+                    macro_tickers=MACRO_TICKERS_RL,
+                    settings=SETTINGS,
+                    enable_cash_action=enable_cash_action,
+                    enable_margin_short=enable_margin_short,
+                    overnight_feature_path=overnight_feature_path,
+                    enable_sl_features=enable_sl_features,
+                    sl_scores=sl_scores,
+                )
 
             train_and_save_model(
                 algo=algo,
@@ -402,19 +443,23 @@ def _run_single_walk_forward(
             )
 
         # Build evaluation environment
-        test_env, _ = build_eval_env(
-            tickers=tickers,
-            test_start=test_start,
-            test_end=test_end,
-            window_size=WINDOW_SIZE,
-            macro_tickers=MACRO_TICKERS_RL,
-            settings=SETTINGS,
-            enable_cash_action=enable_cash_action,
-            enable_margin_short=enable_margin_short,
-            overnight_feature_path=overnight_feature_path,
-            enable_sl_features=enable_sl_features,
-            sl_scores=sl_scores,
-        )
+        if base_test_env is not None:
+            base_test_env.set_time_window(test_start, test_end)
+            test_env = base_test_env
+        else:
+            test_env, _ = build_eval_env(
+                tickers=tickers,
+                test_start=test_start,
+                test_end=test_end,
+                window_size=WINDOW_SIZE,
+                macro_tickers=MACRO_TICKERS_RL,
+                settings=SETTINGS,
+                enable_cash_action=enable_cash_action,
+                enable_margin_short=enable_margin_short,
+                overnight_feature_path=overnight_feature_path,
+                enable_sl_features=enable_sl_features,
+                sl_scores=sl_scores,
+            )
 
         # Load trained model
         from stable_baselines3 import PPO, SAC
@@ -464,8 +509,11 @@ def _run_single_walk_forward(
             f"Cash={p_metrics['avg_cash_weight'] * 100:.2f}%"
         )
         import gc as _gc
-        del model, test_env
-        if train_env is not None:
+        del model
+        if test_env is not base_test_env:
+            del test_env
+        test_env = None
+        if train_env is not None and train_env is not base_train_env:
             del train_env
         train_env = None
         _gc.collect()
@@ -626,6 +674,9 @@ def parse_args():
         action="store_true",
         help="Use GRU-over-window TemporalGnnFeatureExtractor.",
     )
+    parser.add_argument(
+        "--npz-path", type=str, default=None, help="Path to precompiled .npz dataset"
+    )
     return parser.parse_args()
 
 
@@ -649,6 +700,7 @@ if __name__ == "__main__":
             overnight_feature_path=args.overnight_feature_path,
             temporal_extractor=args.temporal_extractor,
             sl_scores_dir=args.sl_scores_dir,
+            npz_path=args.npz_path,
         )
     else:
         algos = ["ppo", "sac"] if args.algo == "both" else [args.algo]
@@ -668,4 +720,5 @@ if __name__ == "__main__":
             overnight_feature_path=args.overnight_feature_path,
             temporal_extractor=args.temporal_extractor,
             sl_scores_dir=args.sl_scores_dir,
+            npz_path=args.npz_path,
         )

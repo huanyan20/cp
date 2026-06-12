@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import cmoney_rpa
-import trade_guard
+import rpa_pipeline.cmoney_rpa as cmoney_rpa
+import rpa_pipeline.trade_guard as trade_guard
 
 
 class FakeRPA:

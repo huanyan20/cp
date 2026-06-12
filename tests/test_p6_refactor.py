@@ -121,7 +121,7 @@ class SignalValidatorFacadeTests(unittest.TestCase):
 
     def test_objects_are_same_as_cmoney_rpa(self):
         """Symbols in signal_validator are the same objects as in cmoney_rpa."""
-        import cmoney_rpa
+        import rpa_pipeline.cmoney_rpa as cmoney_rpa
         import signal_validator
 
         for sym in ["SignalError", "load_signal", "record_signal", "signal_was_executed"]:
@@ -156,7 +156,7 @@ class RebalancePlannerFacadeTests(unittest.TestCase):
 
     def test_objects_are_same_as_cmoney_rpa(self):
         """Symbols in rebalance_planner are the same objects as in cmoney_rpa."""
-        import cmoney_rpa
+        import rpa_pipeline.cmoney_rpa as cmoney_rpa
         import rebalance_planner
 
         for sym in ["build_rebalance_plan", "build_dry_run_diff", "run_signal_file"]:
@@ -182,7 +182,7 @@ class RebalancePlannerFacadeTests(unittest.TestCase):
 class BackwardCompatTests(unittest.TestCase):
     def test_cmoney_rpa_signal_symbols_still_accessible(self):
         """All signal-related symbols remain accessible via cmoney_rpa."""
-        import cmoney_rpa
+        import rpa_pipeline.cmoney_rpa as cmoney_rpa
 
         for sym in ["SignalError", "EXECUTION_LOG_FILE", "load_signal",
                     "record_signal", "signal_was_executed"]:
@@ -193,7 +193,7 @@ class BackwardCompatTests(unittest.TestCase):
 
     def test_cmoney_rpa_rebalance_symbols_still_accessible(self):
         """All rebalance-related symbols remain accessible via cmoney_rpa."""
-        import cmoney_rpa
+        import rpa_pipeline.cmoney_rpa as cmoney_rpa
 
         for sym in ["build_rebalance_plan", "build_dry_run_diff",
                     "write_dry_run_diff", "run_signal_file"]:
@@ -204,7 +204,7 @@ class BackwardCompatTests(unittest.TestCase):
 
     def test_cmoney_rpa_account_symbols_still_accessible(self):
         """get_auto_aids and get_accounts_config still accessible via cmoney_rpa."""
-        import cmoney_rpa
+        import rpa_pipeline.cmoney_rpa as cmoney_rpa
 
         self.assertTrue(callable(cmoney_rpa.get_auto_aids))
         self.assertTrue(callable(cmoney_rpa.get_accounts_config))
@@ -212,7 +212,7 @@ class BackwardCompatTests(unittest.TestCase):
     def test_cmoney_rpa_get_accounts_config_is_cmoney_client_version(self):
         """cmoney_rpa.get_accounts_config is the same function as cmoney_client's."""
         import cmoney_client
-        import cmoney_rpa
+        import rpa_pipeline.cmoney_rpa as cmoney_rpa
 
         self.assertIs(cmoney_rpa.get_accounts_config, cmoney_client.get_accounts_config)
 
@@ -220,8 +220,8 @@ class BackwardCompatTests(unittest.TestCase):
         """trade_guard can import CMoneyRPA, build_dry_run_diff, load_signal from cmoney_rpa."""
         import importlib
 
-        # Re-import trade_guard fresh to check its import chain
-        import trade_guard
+        # Re-import rpa_pipeline.trade_guard as trade_guard fresh to check its import chain
+        import rpa_pipeline.trade_guard as trade_guard
         importlib.reload(trade_guard)
 
         # trade_guard should expose generate_diff (its public API)

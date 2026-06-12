@@ -9,8 +9,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import daily_trade_runner
-import trade_guard
+import rpa_pipeline.daily_trade_runner as daily_trade_runner
+import rpa_pipeline.trade_guard as trade_guard
 
 
 class AccountStatusOnlyRPA:

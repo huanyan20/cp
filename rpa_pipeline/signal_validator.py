@@ -1,12 +1,13 @@
+import sys, os; sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 """Signal validation and execution log management.
 
 Exported symbols
 ----------------
-- ``SignalError``           â€” custom exception for malformed / expired signals
-- ``EXECUTION_LOG_FILE``    â€” path to the execution log (module-level constant)
-- ``load_signal``           â€” parse, validate, and normalise a signal JSON file
-- ``record_signal``         â€” append a signal ID to the execution log
-- ``signal_was_executed``   â€” check whether a signal ID has been logged
+- ``SignalError``           ¡X custom exception for malformed / expired signals
+- ``EXECUTION_LOG_FILE``    ¡X path to the execution log (module-level constant)
+- ``load_signal``           ¡X parse, validate, and normalise a signal JSON file
+- ``record_signal``         ¡X append a signal ID to the execution log
+- ``signal_was_executed``   ¡X check whether a signal ID has been logged
 """
 
 from __future__ import annotations

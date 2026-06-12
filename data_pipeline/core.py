@@ -18,14 +18,24 @@ def fetch_and_process_data(
     end_date: str = "2023-12-31",
     window_size: int = 20,
 ) -> pd.DataFrame:
-    print(f"> 正在下載 {ticker} 歷史數據 ({start_date} ~ {end_date})...")
-    raw = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False)
+    cache_dir = YFINANCE_CACHE_DIR / "raw_parquet"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"{ticker}_{start_date}_{end_date}.parquet"
 
-    if raw.empty:
-        raise ValueError(f"無法下載 {ticker} 的資料，請確認股票代號與網路連線。")
-
-    if isinstance(raw.columns, pd.MultiIndex):
-        raw.columns = raw.columns.get_level_values(0)
+    if cache_path.exists():
+        print(f"> 從 Parquet 快取讀取 {ticker} ({start_date} ~ {end_date})...")
+        raw = pd.read_parquet(cache_path)
+    else:
+        print(f"> 正在下載 {ticker} 歷史數據 ({start_date} ~ {end_date})...")
+        raw = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False)
+        
+        if raw.empty:
+            raise ValueError(f"無法下載 {ticker} 的資料，請確認股票代號與網路連線。")
+            
+        if isinstance(raw.columns, pd.MultiIndex):
+            raw.columns = raw.columns.get_level_values(0)
+            
+        raw.to_parquet(cache_path)
 
     df = raw[["Open", "High", "Low", "Close", "Volume"]].copy()
     df.dropna(inplace=True)

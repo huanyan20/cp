@@ -1,12 +1,13 @@
+import sys, os; sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 """Rebalance planning: compute buy/sell diffs and orchestrate signal execution.
 
 Exported symbols
 ----------------
-- ``build_rebalance_plan``  â€” compute buy/sell lot diffs from current vs target
-- ``build_dry_run_diff``    â€” produce a dry-run diff JSON payload
-- ``write_dry_run_diff``    â€” high-level helper: load signal, query RPA, write JSON
-- ``run_signal_file``       â€” orchestrate a full signal file execution / dry-run
-- ``_current_lots_from_rpa`` â€” extract current lot counts from an RPA instance
+- ``build_rebalance_plan``  ¡X compute buy/sell lot diffs from current vs target
+- ``build_dry_run_diff``    ¡X produce a dry-run diff JSON payload
+- ``write_dry_run_diff``    ¡X high-level helper: load signal, query RPA, write JSON
+- ``run_signal_file``       ¡X orchestrate a full signal file execution / dry-run
+- ``_current_lots_from_rpa`` ¡X extract current lot counts from an RPA instance
 """
 
 from __future__ import annotations

@@ -1,10 +1,11 @@
 """Centralized project settings for research, evaluation, live trading, and paths."""
 
-from __future__ import annotations
-
 import os
-from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parent
 RESULTS_DIR = ROOT_DIR / "results_dir"
@@ -12,43 +13,10 @@ MODELS_DIR = ROOT_DIR / "models_dir"
 LOGS_DIR = ROOT_DIR / "logs"
 CAPITAL_FLOW_DATA_DIR = ROOT_DIR / "capital_flow_analysis" / "data"
 
-
-def _env_bool(name: str, default: bool = False) -> bool:
-    return os.getenv(name, str(default)).strip().lower() == "true"
-
-
-def _env_int(name: str, default: int) -> int:
-    try:
-        return int(os.getenv(name, str(default)))
-    except ValueError:
-        return default
-
-
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(os.getenv(name, str(default)))
-    except ValueError:
-        return default
-
-
-def _env_str(name: str, default: str) -> str:
-    value = os.getenv(name)
-    return default if value is None or value == "" else value
-
-
-def _env_optional_str(name: str, default: str | None) -> str | None:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value or None
-
-
-def resolve_torch_device(requested: str | None = None) -> str:
-    """Map RESEARCH_DEVICE (auto|cuda|cpu) to an SB3/PyTorch device string."""
-    choice = (requested or _env_str("RESEARCH_DEVICE", "auto")).strip().lower()
+def resolve_torch_device(requested: Optional[str] = None) -> str:
+    choice = (requested or os.getenv("RESEARCH_DEVICE", "auto")).strip().lower()
     if choice in {"gpu", "cuda"}:
         import torch
-
         if not torch.cuda.is_available():
             raise RuntimeError(
                 "RESEARCH_DEVICE=cuda but CUDA is unavailable. "
@@ -60,188 +28,153 @@ def resolve_torch_device(requested: str | None = None) -> str:
         return "cpu"
     if choice == "auto":
         import torch
-
         return "cuda" if torch.cuda.is_available() else "cpu"
-    raise ValueError(
-        f"Unknown RESEARCH_DEVICE: {choice!r}. Expected one of auto, cuda, cpu."
-    )
-
+    raise ValueError(f"Unknown RESEARCH_DEVICE: {choice!r}")
 
 def describe_torch_device(device: str) -> str:
     if device != "cuda":
         return device
     import torch
-
     return f"cuda ({torch.cuda.get_device_name(0)})"
 
-
-# O2 — layered training protocol. Tiers differ by seed count; timesteps fixed at 500K.
 TIER_PRESETS: dict[str, dict[str, int]] = {
     "smoke": {"timesteps": 500_000, "seeds": 1},
     "candidate": {"timesteps": 500_000, "seeds": 2},
     "promotion": {"timesteps": 500_000, "seeds": 3},
 }
 
-
 def resolve_tier(tier: str, base_seeds: list[int]) -> tuple[int, list[int]]:
-    """Map a research tier to (timesteps, seeds) using the first N base seeds.
-
-    Raises ValueError for unknown tiers so CLI typos fail fast.
-    """
     key = (tier or "").strip().lower()
     if key not in TIER_PRESETS:
-        raise ValueError(
-            f"Unknown research tier: {tier!r}. Expected one of {sorted(TIER_PRESETS)}."
-        )
+        raise ValueError(f"Unknown research tier: {tier!r}. Expected one of {sorted(TIER_PRESETS)}.")
     preset = TIER_PRESETS[key]
     seed_count = max(1, preset["seeds"])
     seeds = base_seeds[:seed_count] if base_seeds else []
     return preset["timesteps"], seeds
 
+class ResearchSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="RESEARCH_", env_file=".env", extra="ignore")
+    
+    train_start: str = "2020-01-01"
+    train_end: str = "2023-12-31"
+    test_start: str = "2024-01-01"
+    window_size: int = 20
+    timesteps: int = 300_000
+    algo: str = Field("ppo", validation_alias="RESEARCH_ALGO")
+    seed: int = Field(42, validation_alias="RESEARCH_SEED")
+    seeds: str = Field("42,43,44", validation_alias="RESEARCH_SEEDS")
+    tier: str = Field("", validation_alias="RESEARCH_TIER")
+    topk: int = Field(5, validation_alias="RESEARCH_TOPK")
+    softmax_temp: float = Field(1.0, validation_alias="RESEARCH_SOFTMAX_TEMP")
+    enable_cash_action: bool = Field(False, validation_alias="RESEARCH_ENABLE_CASH_ACTION")
+    enable_margin_short: bool = Field(False, validation_alias="RESEARCH_ENABLE_MARGIN_SHORT")
+    env_config_hash: Optional[str] = Field(None, validation_alias="RESEARCH_ENV_CONFIG_HASH")
+    env_config_version: Optional[str] = Field(None, validation_alias="RESEARCH_ENV_CONFIG_VERSION")
+    torch_device: str = Field("auto", validation_alias="RESEARCH_DEVICE")
 
-@dataclass(frozen=True)
-class ResearchSettings:
-    train_start: str = field(default_factory=lambda: _env_str("RESEARCH_TRAIN_START", "2020-01-01"))
-    train_end: str = field(default_factory=lambda: _env_str("RESEARCH_TRAIN_END", "2023-12-31"))
-    test_start: str = field(default_factory=lambda: _env_str("RESEARCH_TEST_START", "2024-01-01"))
-    window_size: int = field(default_factory=lambda: _env_int("RESEARCH_WINDOW_SIZE", 20))
-    timesteps: int = field(default_factory=lambda: _env_int("RESEARCH_TIMESTEPS", 300_000))
-    walk_forward_timesteps: int = field(default_factory=lambda: _env_int("WALK_FORWARD_TIMESTEPS", 300_000))
-    default_algo: str = field(default_factory=lambda: _env_str("RESEARCH_ALGO", "ppo"))
-    default_seed: int = field(default_factory=lambda: _env_int("RESEARCH_SEED", 42))
-    default_seeds: str = field(default_factory=lambda: _env_str("RESEARCH_SEEDS", "42,43,44"))
-    walk_forward_cash_mode: str = field(default_factory=lambda: _env_str("WALK_FORWARD_CASH_MODE", "enabled"))
-    # O2: optional training tier (smoke|candidate|promotion); empty keeps explicit timesteps/seeds.
-    research_tier: str = field(default_factory=lambda: _env_str("RESEARCH_TIER", ""))
-    default_topk: int = field(default_factory=lambda: _env_int("RESEARCH_TOPK", 5))
-    default_softmax_temp: float = field(default_factory=lambda: _env_float("RESEARCH_SOFTMAX_TEMP", 1.0))
-    default_enable_cash_action: bool = field(default_factory=lambda: _env_bool("RESEARCH_ENABLE_CASH_ACTION", False))
-    default_enable_margin_short: bool = field(default_factory=lambda: _env_bool("RESEARCH_ENABLE_MARGIN_SHORT", False))
-    overnight_feature_path: str | None = field(
-        default_factory=lambda: _env_optional_str(
-            "OVERNIGHT_FEATURE_PATH",
-            str(CAPITAL_FLOW_DATA_DIR / "overnight_gap_features_1d.csv"),
-        )
+    # Non-prefixed env vars (aliased explicitly)
+    walk_forward_timesteps: int = Field(300_000, validation_alias="WALK_FORWARD_TIMESTEPS")
+    walk_forward_cash_mode: str = Field("enabled", validation_alias="WALK_FORWARD_CASH_MODE")
+    overnight_feature_path: Optional[str] = Field(
+        str(CAPITAL_FLOW_DATA_DIR / "overnight_gap_features_1d.csv"), 
+        validation_alias="OVERNIGHT_FEATURE_PATH"
     )
-    # ── Promotion gate thresholds (N2 — configurable via env var) ──────────────
-    promotion_min_seeds: int = field(
-        default_factory=lambda: _env_int("PROMOTION_MIN_SEEDS", 3)
-    )
-    promotion_sortino_threshold: float = field(
-        default_factory=lambda: _env_float("PROMOTION_SORTINO_THRESHOLD", 0.8)
-    )
-    promotion_max_drawdown: float = field(
-        default_factory=lambda: _env_float("PROMOTION_MAX_DRAWDOWN", 0.35)
-    )
-    promotion_turnover_limit: float = field(
-        default_factory=lambda: _env_float("PROMOTION_TURNOVER_LIMIT", 0.10)
-    )
-    # O1: filter experiment_report to a specific env_config_hash (8-char); empty = auto
-    env_config_hash: str | None = field(
-        default_factory=lambda: _env_optional_str("RESEARCH_ENV_CONFIG_HASH", None)
-    )
-    env_config_version: str | None = field(
-        default_factory=lambda: _env_optional_str("RESEARCH_ENV_CONFIG_VERSION", None)
-    )
-    # auto: use CUDA when available; cuda: require GPU; cpu: force CPU
-    torch_device: str = field(default_factory=lambda: _env_str("RESEARCH_DEVICE", "auto"))
+    promotion_min_seeds: int = Field(3, validation_alias="PROMOTION_MIN_SEEDS")
+    promotion_sortino_threshold: float = Field(0.8, validation_alias="PROMOTION_SORTINO_THRESHOLD")
+    promotion_max_drawdown: float = Field(0.35, validation_alias="PROMOTION_MAX_DRAWDOWN")
+    promotion_turnover_limit: float = Field(0.10, validation_alias="PROMOTION_TURNOVER_LIMIT")
 
+    @property
+    def default_algo(self) -> str: return self.algo
+    @property
+    def default_seed(self) -> int: return self.seed
+    @property
+    def default_seeds(self) -> str: return self.seeds
+    @property
+    def research_tier(self) -> str: return self.tier
+    @property
+    def default_topk(self) -> int: return self.topk
+    @property
+    def default_softmax_temp(self) -> float: return self.softmax_temp
+    @property
+    def default_enable_cash_action(self) -> bool: return self.enable_cash_action
+    @property
+    def default_enable_margin_short(self) -> bool: return self.enable_margin_short
 
-@dataclass(frozen=True)
-class EvaluationSettings:
-    test_start: str = field(default_factory=lambda: _env_str("EVALUATION_TEST_START", "2024-01-01"))
-    test_end_strategy: str = field(default_factory=lambda: _env_str("EVALUATION_TEST_END_STRATEGY", "today"))
-    model_name: str = field(default_factory=lambda: _env_str("EVALUATION_MODEL_NAME", "ppo_portfolio_full_stock_seed42.zip"))
-    output_file: str = field(default_factory=lambda: _env_str("EVALUATION_OUTPUT_FILE", "portfolio_evaluation_ppo_cash_v9.png"))
+class EvaluationSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="EVALUATION_", env_file=".env", extra="ignore")
+    
+    test_start: str = "2024-01-01"
+    test_end_strategy: str = "today"
+    model_name: str = "ppo_portfolio_full_stock_seed42.zip"
+    output_file: str = "portfolio_evaluation_ppo_cash_v9.png"
 
+class LiveSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    
+    enable_live_trading: bool = Field(False, validation_alias="ENABLE_LIVE_TRADING")
+    cmoney_aid: Optional[str] = Field(None, validation_alias="CMONEY_AID")
+    signal_ttl_seconds: int = Field(900, validation_alias="SIGNAL_TTL_SECONDS")
+    macro_guard_path: Path = Field(CAPITAL_FLOW_DATA_DIR / "preopen_macro_check.json")
+    dry_run_diff_path: Path = Field(ROOT_DIR / "trade_guard_diff.json")
 
-@dataclass(frozen=True)
-class LiveSettings:
-    enable_live_trading: bool = field(default_factory=lambda: _env_bool("ENABLE_LIVE_TRADING", False))
-    cmoney_aid: str | None = os.getenv("CMONEY_AID")
-    signal_ttl_seconds: int = field(default_factory=lambda: _env_int("SIGNAL_TTL_SECONDS", 900))
-    macro_guard_path: Path = field(default_factory=lambda: CAPITAL_FLOW_DATA_DIR / "preopen_macro_check.json")
-    dry_run_diff_path: Path = field(default_factory=lambda: ROOT_DIR / "trade_guard_diff.json")
+class RiskLimits(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="MAX_", env_file=".env", extra="ignore")
+    
+    single_weight: float = Field(0.35, validation_alias="MAX_SINGLE_WEIGHT")
+    total_exposure: float = Field(1.0, validation_alias="MAX_TOTAL_EXPOSURE")
+    leverage: float = Field(2.0, validation_alias="MAX_LEVERAGE")
+    turnover: float = Field(0.30, validation_alias="MAX_TURNOVER")
+    
+    @property
+    def max_single_weight(self) -> float: return self.single_weight
+    @property
+    def max_total_exposure(self) -> float: return self.total_exposure
+    @property
+    def max_leverage(self) -> float: return self.leverage
+    @property
+    def max_turnover(self) -> float: return self.turnover
 
+class StressSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="STRESS_", env_file=".env", extra="ignore")
+    
+    base_fee_rate: float = 0.001425
+    base_tax_rate: float = 0.003
+    high_fee_rate: float = 0.003
+    high_fee_tax_rate: float = 0.003
+    high_slippage_fee_rate: float = 0.005
+    high_slippage_tax_rate: float = 0.003
+    worst_fee_rate: float = 0.005
+    worst_tax_rate: float = 0.004
 
-@dataclass(frozen=True)
-class RiskLimits:
-    max_single_weight: float = field(default_factory=lambda: _env_float("MAX_SINGLE_WEIGHT", 0.35))
-    max_total_exposure: float = field(default_factory=lambda: _env_float("MAX_TOTAL_EXPOSURE", 1.0))
-    max_leverage: float = field(default_factory=lambda: _env_float("MAX_LEVERAGE", 2.0))
-    max_turnover: float = field(default_factory=lambda: _env_float("MAX_TURNOVER", 0.30))
+    @property
+    def worst_case_fee_rate(self) -> float: return self.worst_fee_rate
+    @property
+    def worst_case_tax_rate(self) -> float: return self.worst_tax_rate
 
-
-@dataclass(frozen=True)
-class StressSettings:
-    """Fee/slippage rates (one-way %) for the four cost sensitivity scenarios.
-
-    Override any value via the corresponding env var (all floats, e.g. 0.001425).
-    Scenarios
-    ---------
-    base          — standard Taiwan brokerage discount rate + sell tax
-    high_fee      — elevated brokerage fee, same sell tax
-    high_slippage — large spread/slippage assumption, same sell tax
-    worst_case    — high slippage + higher sell tax (conservative ceiling)
-    """
-
-    # base scenario
-    base_fee_rate: float = field(
-        default_factory=lambda: _env_float("STRESS_BASE_FEE_RATE", 0.001425)
-    )
-    base_tax_rate: float = field(
-        default_factory=lambda: _env_float("STRESS_BASE_TAX_RATE", 0.003)
-    )
-    # high_fee scenario
-    high_fee_rate: float = field(
-        default_factory=lambda: _env_float("STRESS_HIGH_FEE_RATE", 0.003)
-    )
-    high_fee_tax_rate: float = field(
-        default_factory=lambda: _env_float("STRESS_HIGH_FEE_TAX_RATE", 0.003)
-    )
-    # high_slippage scenario
-    high_slippage_fee_rate: float = field(
-        default_factory=lambda: _env_float("STRESS_HIGH_SLIPPAGE_FEE_RATE", 0.005)
-    )
-    high_slippage_tax_rate: float = field(
-        default_factory=lambda: _env_float("STRESS_HIGH_SLIPPAGE_TAX_RATE", 0.003)
-    )
-    # worst_case scenario
-    worst_case_fee_rate: float = field(
-        default_factory=lambda: _env_float("STRESS_WORST_FEE_RATE", 0.005)
-    )
-    worst_case_tax_rate: float = field(
-        default_factory=lambda: _env_float("STRESS_WORST_TAX_RATE", 0.004)
-    )
-
-
-@dataclass(frozen=True)
-class PathSettings:
+class PathSettings(BaseSettings):
     root_dir: Path = ROOT_DIR
     results_dir: Path = RESULTS_DIR
     models_dir: Path = MODELS_DIR
     logs_dir: Path = LOGS_DIR
     signal_path: Path = ROOT_DIR / "signal.json"
     execution_log_path: Path = ROOT_DIR / "executed_signals.json"
-    experiment_report_md: Path = ROOT_DIR / "experiment_report.md"
+    experiment_report_md: Path = RESULTS_DIR / "experiment_report.md"
     experiment_summary_json: Path = ROOT_DIR / "experiment_summary.json"
-    # P5 summary files consumed by promotion gate
     baseline_summary_path: Path = RESULTS_DIR / "baseline_summary.json"
     ablation_summary_path: Path = RESULTS_DIR / "ablation_summary.json"
     stress_summary_path: Path = RESULTS_DIR / "stress_summary.json"
-    # N4: pending buy orders directory (replaces root-level scatter)
     pending_buys_dir: Path = ROOT_DIR / "logs"
 
-
-@dataclass(frozen=True)
-class AppSettings:
-    research: ResearchSettings = field(default_factory=ResearchSettings)
-    evaluation: EvaluationSettings = field(default_factory=EvaluationSettings)
-    live: LiveSettings = field(default_factory=LiveSettings)
-    paths: PathSettings = field(default_factory=PathSettings)
-    risk_limits: RiskLimits = field(default_factory=RiskLimits)
-    stress: StressSettings = field(default_factory=StressSettings)
-
+class AppSettings(BaseSettings):
+    research: ResearchSettings = Field(default_factory=ResearchSettings)
+    evaluation: EvaluationSettings = Field(default_factory=EvaluationSettings)
+    live: LiveSettings = Field(default_factory=LiveSettings)
+    paths: PathSettings = Field(default_factory=PathSettings)
+    risk_limits: RiskLimits = Field(default_factory=RiskLimits)
+    stress: StressSettings = Field(default_factory=StressSettings)
 
 def load_settings() -> AppSettings:
     return AppSettings()
+
+SETTINGS = load_settings()

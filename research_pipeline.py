@@ -11,7 +11,6 @@ from data_loader import fetch_multi_asset_data
 from env_config import build_env_config_snapshot
 from metrics_utils import calculate_metrics
 from trading_env import TaiwanStockEnv
-from train_portfolio import build_model
 
 PERIODS = [
     {
@@ -245,7 +244,12 @@ def train_and_save_model(
         model_path: Path to save trained model
         temporal_extractor: Use GRU temporal feature extractor
     """
-    model, callback = build_model(algo, train_env, timesteps, temporal_extractor=temporal_extractor)
+    from core.model_trainer import ModelTrainer
+    from settings import SETTINGS
+    
+    trainer = ModelTrainer(algo, device=SETTINGS.research.torch_device)
+    model, callback = trainer.build_model(train_env, timesteps, temporal_extractor=temporal_extractor)
+    
     if callback is not None:
         model.learn(total_timesteps=timesteps, progress_bar=True, callback=callback)
     else:

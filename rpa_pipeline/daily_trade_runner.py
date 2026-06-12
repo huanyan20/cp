@@ -1,3 +1,4 @@
+import sys, os; sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import json
 import logging
 import os
@@ -168,7 +169,7 @@ def _require_signal_guard(signal_path: str = "signal.json", guard_path: str = "c
 def _require_dry_run_diff(signal_path: str = "signal.json"):
     diff_cmd = [
         sys.executable,
-        "trade_guard.py",
+        "rpa_pipeline/trade_guard.py",
         "--signal",
         signal_path,
         "--aid",
@@ -246,7 +247,7 @@ def main():
     pending_output = ""
     try:
         logger.info("[自動登入] 正在背景換取最新 Cookie...")
-        login_cmd = [sys.executable, "auto_login.py"]
+        login_cmd = [sys.executable, "rpa_pipeline/auto_login.py"]
         login_result = subprocess.run(
             login_cmd, check=True, capture_output=True, text=True
         )
@@ -259,7 +260,7 @@ def main():
             logger.critical("[Step 0] Preopen guard is CRITICAL. Skipping Pending BUY orders.")
         else:
             logger.info("[Step 0] 執行前一日 Pending BUY 單...")
-            pending_cmd = [sys.executable, "cmoney_rpa.py", "--pending-buys"]
+            pending_cmd = [sys.executable, "rpa_pipeline/cmoney_rpa.py", "--pending-buys"]
             if macro_warn:
                 logger.info("[Step 0] Applying WARN guard: pending buys will be halved.")
                 pending_cmd.append("--half-buys")
@@ -291,7 +292,7 @@ def main():
 
     eval_cmd = [
         sys.executable, 
-        "evaluate_portfolio.py",
+        "scripts/evaluate_portfolio.py",
         "--model-path",
         "ppo_portfolio_full_stock_seed42.zip",
         "--overnight-feature-path",
@@ -342,7 +343,7 @@ def main():
         _require_signal_guard(str(SETTINGS.paths.signal_path), str(SETTINGS.live.macro_guard_path))
         rpa_cmd = [
             sys.executable,
-            "cmoney_rpa.py",
+            "rpa_pipeline/cmoney_rpa.py",
             "--signal",
             str(SETTINGS.paths.signal_path),
             "--sell-only",

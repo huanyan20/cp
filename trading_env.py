@@ -4,7 +4,11 @@ from collections import deque
 
 import gymnasium as gym
 import numpy as np
+import os
 from gymnasium import spaces
+
+from env_core.observation_builder import ObservationBuilder
+from env_core.reward_calculator import RewardCalculator
 
 try:
     from trading_env_kernels import (
@@ -63,7 +67,8 @@ class TaiwanStockEnv(gym.Env):
 
     def __init__(
         self,
-        df_dict: dict,
+        df_dict: dict | None = None,
+        npz_path: str | None = None,
         window_size: int = 20,
         initial_balance: float = 1_000_000.0,
         topk: int = 5,
@@ -78,38 +83,50 @@ class TaiwanStockEnv(gym.Env):
     ):
         super().__init__()
 
-        self.tickers = list(df_dict.keys())
-        self.num_stocks = len(self.tickers)
-        self._topk = min(topk, self.num_stocks)
-        self._softmax_temp = max(softmax_temp, 1e-3)
+        if df_dict is None and npz_path is None:
+            raise ValueError("Must provide either df_dict or npz_path.")
+
         self.use_benchmark_reward = use_benchmark_reward
         self.enable_cash_action = enable_cash_action
         self.enable_margin_short = enable_margin_short
         self.max_leverage = max_leverage
         self.record_trades = record_trades
+        self.window_size = window_size
+        self.initial_balance = initial_balance
 
         self.MARGIN_RATE_DAILY = 0.06 / 252  # 6% annual margin loan interest
         self.SHORT_RATE_DAILY = 0.015 / 252  # 1.5% annual stock borrow fee
 
-        self.dfs = {ticker: df.reset_index(drop=True) for ticker, df in df_dict.items()}
-        self.max_steps = len(self.dfs[self.tickers[0]])
-        self.num_market_features = self.dfs[self.tickers[0]].shape[1]
-        self.window_size = window_size
-        self.initial_balance = initial_balance
+        if npz_path and os.path.exists(npz_path):
+            data = np.load(npz_path, allow_pickle=True)
+            self._full_market_data = data["market_data"]
+            self._full_log_returns = data["log_returns"]
+            self.tickers = list(data["tickers"])
+            self._full_dates = data["dates"]
+            self.num_stocks = self._full_market_data.shape[1]
+            self.num_market_features = self._full_market_data.shape[2]
+            self.dfs = None
+        else:
+            self.tickers = list(df_dict.keys())
+            self.num_stocks = len(self.tickers)
+            self.dfs = {ticker: df.reset_index(drop=True) for ticker, df in df_dict.items()}
+            self.num_market_features = self.dfs[self.tickers[0]].shape[1]
+            first_ticker = self.tickers[0]
+            try:
+                self._full_dates = df_dict[first_ticker].index.strftime("%Y-%m-%d").to_numpy()
+            except AttributeError:
+                self._full_dates = df_dict[first_ticker].index.to_numpy().astype(str)
 
-        # Pandas .iloc indexing inside step()/_get_observation() dominated env
-        # runtime, so all per-step reads go through pre-stacked NumPy arrays.
-        # self.dfs is kept only for external consumers and trade recording.
-        # Shape: [max_steps, num_stocks, num_market_features]
-        self._market_data = np.stack(
-            [self.dfs[t].to_numpy(dtype=np.float32) for t in self.tickers], axis=1
-        )
-        # float64 to keep reward math identical to the old per-cell reads.
-        # Shape: [max_steps, num_stocks]
-        self._log_returns = np.stack(
-            [self.dfs[t]["log_return"].to_numpy(dtype=np.float64) for t in self.tickers],
-            axis=1,
-        )
+            self._full_market_data = np.stack(
+                [self.dfs[t].to_numpy(dtype=np.float32) for t in self.tickers], axis=1
+            )
+            self._full_log_returns = np.stack(
+                [self.dfs[t]["log_return"].to_numpy(dtype=np.float64) for t in self.tickers],
+                axis=1,
+            )
+
+        self._topk = min(topk, self.num_stocks)
+        self._softmax_temp = max(softmax_temp, 1e-3)
 
         self._NUM_ACCOUNT_FEATURES = NUM_ACCOUNT_FEATURES
         self.enable_sl_features = bool(enable_sl_features)
@@ -117,12 +134,12 @@ class TaiwanStockEnv(gym.Env):
         self._NUM_SL_FEATURES = 3 if self.enable_sl_features else 0
         if self.enable_sl_features and not self._sl_features_by_ticker:
             raise ValueError("enable_sl_features=True requires sl_features_by_ticker.")
-        # Pre-stacked SL features [max_steps, num_stocks, 3]; missing tickers
-        # or steps beyond an array's length stay zero (same as the old lookup).
-        self._sl_data = None
+            
+        self._full_sl_data = None
         if self.enable_sl_features:
-            self._sl_data = np.zeros(
-                (self.max_steps, self.num_stocks, self._NUM_SL_FEATURES),
+            full_max_steps = self._full_market_data.shape[0]
+            self._full_sl_data = np.zeros(
+                (full_max_steps, self.num_stocks, self._NUM_SL_FEATURES),
                 dtype=np.float32,
             )
             for i, ticker in enumerate(self.tickers):
@@ -130,18 +147,35 @@ class TaiwanStockEnv(gym.Env):
                 if sl_row is None:
                     continue
                 sl_arr = np.asarray(sl_row, dtype=np.float32)
-                n = min(len(sl_arr), self.max_steps)
-                self._sl_data[:n, i, :] = sl_arr[:n]
+                n = min(len(sl_arr), full_max_steps)
+                self._full_sl_data[:n, i, :] = sl_arr[:n]
+
+        # Initialize the active view to the entire dataset
+        self.set_time_window(None, None)
+
+        self._reward_calculator = RewardCalculator(
+            sharpe_window=SHARPE_WINDOW,
+            use_benchmark_reward=self.use_benchmark_reward,
+            enable_cash_action=self.enable_cash_action,
+            enable_margin_short=self.enable_margin_short,
+        )
+
+        self._observation_builder = ObservationBuilder(
+            num_stocks=self.num_stocks,
+            window_size=self.window_size,
+            num_market_features=self.num_market_features,
+            enable_cash_action=self.enable_cash_action,
+            enable_margin_short=self.enable_margin_short,
+            enable_sl_features=self.enable_sl_features,
+        )
+
+        self._obs_dim_per_stock = self._observation_builder.obs_dim_per_stock + self._NUM_SL_FEATURES
+
         action_dim = self.num_stocks + 1 if self.enable_cash_action else self.num_stocks
         self.action_space = spaces.Box(
             low=-5.0, high=5.0, shape=(action_dim,), dtype=np.float32
         )
 
-        self._obs_dim_per_stock = (
-            window_size * self.num_market_features
-            + self._NUM_ACCOUNT_FEATURES
-            + self._NUM_SL_FEATURES
-        )
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
@@ -150,6 +184,40 @@ class TaiwanStockEnv(gym.Env):
         )
 
         self._reset_state()
+        
+    def set_time_window(self, start_date: str | None, end_date: str | None):
+        """
+        Dynamically slice the environment's active dataset view.
+        If start_date/end_date are None, no bound is applied.
+        Date formats should be 'YYYY-MM-DD'.
+        """
+        start_idx = 0
+        end_idx = len(self._full_dates)
+
+        if start_date is not None:
+            matches = np.where(self._full_dates >= start_date)[0]
+            if len(matches) > 0:
+                start_idx = matches[0]
+
+        if end_date is not None:
+            matches = np.where(self._full_dates <= end_date)[0]
+            if len(matches) > 0:
+                end_idx = matches[-1] + 1  # Exclusive bound
+
+        if start_idx >= end_idx:
+            raise ValueError(f"Invalid time window: {start_date} to {end_date} yields empty data.")
+
+        self._market_data = self._full_market_data[start_idx:end_idx]
+        self._log_returns = self._full_log_returns[start_idx:end_idx]
+        self.dates = self._full_dates[start_idx:end_idx]
+        self.max_steps = self._market_data.shape[0]
+
+        if self._full_sl_data is not None:
+            self._sl_data = self._full_sl_data[start_idx:end_idx]
+        else:
+            self._sl_data = None
+
+        print(f"[TradingEnv] Time window updated: {self.dates[0]} ~ {self.dates[-1]} ({self.max_steps} steps)")
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -184,7 +252,9 @@ class TaiwanStockEnv(gym.Env):
 
         prev_value = self._portfolio_value
         self._update_portfolio(log_returns)
-        # _compute_reward will update self._pomdp_cache; _get_observation reads it.
+        # NOTE: _pomdp_cache is set inside _compute_reward() AFTER appending
+        # log_r to return_history (so sortino is fresh). _get_observation then
+        # reads the cache without recomputing.
         reward = self._compute_reward(prev_value, self._portfolio_value, trade_cost)
 
         self._holding_periods = np.where(
@@ -219,15 +289,11 @@ class TaiwanStockEnv(gym.Env):
         self._positions = np.zeros(self.num_stocks, dtype=np.float32)
         self._trade_returns = np.zeros(self.num_stocks, dtype=np.float32)
         self._holding_periods = np.zeros(self.num_stocks, dtype=np.float32)
-        self._return_history: deque = deque(maxlen=SHARPE_WINDOW)
         self._benchmark_log_r = 0.0
         self._cash_weight = 1.0
         self._last_turnover = 0.0
         self.trades_history = []
-        # Per-step cache: _compute_pomdp_features() is called by both
-        # _compute_reward() and _get_observation() in the same step.
-        # Invalidated (set to None) before history append; then computed once.
-        self._pomdp_cache: tuple[float, float, float] | None = None
+        self._reward_calculator.reset_state()
 
     def _transform_action(
         self, action: np.ndarray, bypass_action_transform: bool = False
@@ -344,7 +410,7 @@ class TaiwanStockEnv(gym.Env):
                 cost += trade_amount * TAX_RATE_SELL
             total_cost += cost
             if self.record_trades:
-                date = str(self.dfs[self.tickers[i]].index[self._current_step])[:10]
+                date = str(self.dates[self._current_step])[:10]
                 self.trades_history.append({
                     "step": self._current_step,
                     "date": date,
@@ -415,176 +481,36 @@ class TaiwanStockEnv(gym.Env):
             self._peak_value, 1e-8
         )
 
-    def _compute_pomdp_features(self) -> tuple[float, float, float]:
-        """Rolling vol / Sortino proxy / current DD — shared by obs and reward.
-
-        Result is cached per-step to avoid recomputation when both
-        _compute_reward() and _get_observation() call this in the same step.
-        Cache is invalidated by _compute_reward() before history is appended.
-        """
-        if self._pomdp_cache is not None:
-            return self._pomdp_cache
-
-        current_dd = float(np.clip(self._current_drawdown(), 0.0, 1.0))
-        n = len(self._return_history)
-        if n < 2:
-            result = (0.0, 0.0, current_dd)
-            self._pomdp_cache = result
-            return result
-
-        arr = np.array(self._return_history, dtype=np.float64)
-        rolling_vol = float(np.clip(np.std(arr) * 100.0, 0.0, 1.0))
-        if n < 5:
-            result = (rolling_vol, 0.0, current_dd)
-            self._pomdp_cache = result
-            return result
-
-        mean_r = float(np.mean(arr))
-        neg_returns = arr[arr < 0]
-        downside_std = (
-            float(np.std(neg_returns) + 1e-8)
-            if len(neg_returns) >= 2
-            else float(np.std(arr) + 1e-8)
-        )
-        sortino_proxy = float(_softsign(mean_r / downside_std))
-        result = (rolling_vol, sortino_proxy, current_dd)
-        self._pomdp_cache = result
-        return result
-
     def _compute_reward(
         self, prev_value: float, curr_value: float, trade_cost: float
     ) -> float:
-        log_r = float(np.log(max(curr_value, 1e-8) / max(prev_value, 1e-8)))
-        # Invalidate POMDP cache BEFORE appending — history changes → old cache stale
-        self._pomdp_cache = None
-        self._return_history.append(log_r)  # must happen before kernel (history_len)
-
-        # Compute once and cache — _get_observation() reuses this in the same step,
-        # avoiding a second np.std/np.mean pass over the return history deque.
-        self._pomdp_cache = self._compute_pomdp_features()
-        _, sortino_proxy, raw_dd = self._pomdp_cache
-
-        capital_util = float(np.sum(np.abs(self._positions)))
-        cash_ratio = (
-            float(self._cash_weight)
-            if self.enable_cash_action
-            else max(0.0, 1.0 - capital_util)
+        return self._reward_calculator.compute_reward(
+            prev_value=prev_value,
+            curr_value=curr_value,
+            trade_cost=trade_cost,
+            benchmark_log_r=self._benchmark_log_r,
+            positions=self._positions,
+            cash_weight=self._cash_weight,
+            last_turnover=self._last_turnover,
+            current_dd=float(np.clip(self._current_drawdown(), 0.0, 1.0)),
         )
-
-        if _NUMBA_AVAILABLE:
-            return compute_reward_kernel(
-                float(log_r),
-                float(self._benchmark_log_r),
-                float(sortino_proxy),
-                float(capital_util),
-                float(trade_cost),
-                float(self._last_turnover),
-                float(cash_ratio),
-                float(raw_dd),
-                bool(self.use_benchmark_reward),
-                bool(self.enable_margin_short),
-                bool(self.enable_cash_action),
-                len(self._return_history),
-                LAMBDA_COST,
-                LAMBDA_TURNOVER,
-                LAMBDA_CASH,
-                LAMBDA_DRAWDOWN,
-                REWARD_REF_DD,
-                REGIME_DD_THRESHOLD,
-                REGIME_PENALTY_COEF,
-                LAMBDA_CASH_DEFENSIVE,
-            )
-
-        # Fallback pure-Python path
-        return_component = _softsign(log_r * 100)
-        if len(self._return_history) >= 5:
-            sortino_component = sortino_proxy * capital_util
-            if self.use_benchmark_reward:
-                benchmark_component = _softsign((log_r - self._benchmark_log_r) * 100)
-                hybrid_reward = (
-                    0.4 * return_component
-                    + 0.3 * sortino_component
-                    + 0.3 * benchmark_component
-                )
-            else:
-                hybrid_reward = 0.5 * return_component + 0.5 * sortino_component
-        else:
-            if self.use_benchmark_reward:
-                benchmark_component = _softsign((log_r - self._benchmark_log_r) * 100)
-                hybrid_reward = 0.6 * return_component + 0.4 * benchmark_component
-            else:
-                hybrid_reward = return_component
-
-        cost_p = LAMBDA_COST * trade_cost
-        turnover_p = LAMBDA_TURNOVER * (self._last_turnover / 2.0)
-        cash_p = LAMBDA_CASH * cash_ratio
-        drawdown_p = LAMBDA_DRAWDOWN * max(0.0, raw_dd - REWARD_REF_DD)
-        regime_penalty = 0.0
-        if raw_dd > REGIME_DD_THRESHOLD and not self.enable_margin_short:
-            stock_exposure = np.sum(np.abs(self._positions))
-            regime_penalty = (
-                REGIME_PENALTY_COEF
-                * stock_exposure
-                * (raw_dd - REGIME_DD_THRESHOLD)
-            )
-        cash_defensive_bonus = 0.0
-        if raw_dd > REGIME_DD_THRESHOLD and self.enable_cash_action:
-            cash_defensive_bonus = (
-                LAMBDA_CASH_DEFENSIVE
-                * cash_ratio
-                * (raw_dd - REGIME_DD_THRESHOLD)
-            )
-        return float(np.clip(
-            hybrid_reward - cost_p - turnover_p - cash_p
-            - drawdown_p - regime_penalty + cash_defensive_bonus,
-            -1.0, 1.0,
-        ))
-
 
     def _get_observation(self) -> np.ndarray:
-        start = self._current_step - self.window_size
-        stock_exposure = float(np.sum(np.abs(self._positions)))
-        if self.enable_margin_short or self.enable_cash_action:
-            cash_ratio = float(self._cash_weight)
-        else:
-            cash_ratio = max(0.0, 1.0 - stock_exposure)
-
-        total_ret = (self._portfolio_value - self.initial_balance) / max(
-            self.initial_balance, 1e-8
+        return self._observation_builder.build(
+            current_step=self._current_step,
+            positions=self._positions,
+            cash_weight=self._cash_weight,
+            portfolio_value=self._portfolio_value,
+            initial_balance=self.initial_balance,
+            max_drawdown=self._max_drawdown,
+            trade_returns=self._trade_returns,
+            holding_periods=self._holding_periods,
+            pomdp_features=self._reward_calculator.get_pomdp_cache(
+                current_dd=float(np.clip(self._current_drawdown(), 0.0, 1.0))
+            ),
+            market_data=self._market_data,
+            sl_data=self._sl_data if self.enable_sl_features else None,
         )
-        dd_norm = float(np.clip(self._max_drawdown, 0.0, 1.0))
-        # Reuse cached result from _compute_reward (same step) — avoids recomputation.
-        # Falls back to live compute on reset()'s first observation (cache is None).
-        rolling_vol, sortino_proxy, current_dd = (
-            self._pomdp_cache if self._pomdp_cache is not None
-            else self._compute_pomdp_features()
-        )
-
-        obs = np.empty((self.num_stocks, self._obs_dim_per_stock), dtype=np.float32)
-        market_dim = self.window_size * self.num_market_features
-        # [window, num_stocks, F] -> [num_stocks, window * F]
-        obs[:, :market_dim] = (
-            self._market_data[start : self._current_step]
-            .transpose(1, 0, 2)
-            .reshape(self.num_stocks, market_dim)
-        )
-
-        account = obs[:, market_dim : market_dim + self._NUM_ACCOUNT_FEATURES]
-        account[:, 0] = cash_ratio
-        account[:, 1] = np.clip(total_ret, -1.0, 1.0)
-        account[:, 2] = dd_norm
-        account[:, 3] = self._positions
-        account[:, 4] = np.clip(self._trade_returns, -1.0, 1.0)
-        account[:, 5] = np.clip(self._holding_periods / 100.0, 0.0, 1.0)
-        account[:, IDX_ROLLING_VOL] = rolling_vol
-        account[:, IDX_ROLLING_SORTINO] = sortino_proxy
-        account[:, IDX_CURRENT_DRAWDOWN] = current_dd
-
-        if self.enable_sl_features:
-            obs[:, market_dim + self._NUM_ACCOUNT_FEATURES :] = self._sl_data[
-                self._current_step
-            ]
-        return obs
 
     def portfolio_state_snapshot(self):
         """PortfolioState-compatible dict for SL allocators (S5)."""

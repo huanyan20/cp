@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import experiment_report
+import scripts.experiment_report as experiment_report
 from env_config import build_env_config_snapshot
 
 

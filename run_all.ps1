@@ -12,7 +12,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Generating experiment report..."
-.\env\Scripts\python.exe experiment_report.py
+$env:PYTHONPATH = (Get-Location).Path
+.\env\Scripts\python.exe scripts\experiment_report.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Experiment report failed"
     exit $LASTEXITCODE

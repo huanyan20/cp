@@ -33,144 +33,18 @@ TRAIN_END = SETTINGS.research.train_end
 WINDOW_SIZE = SETTINGS.research.window_size
 TIMESTEPS = SETTINGS.research.timesteps
 
-
-class EntCoefScheduleCallback(BaseCallback):
-    """Linear entropy coefficient annealing for PPO experiments."""
-
-    def __init__(
-        self,
-        ent_coef_start: float = 0.05,
-        ent_coef_end: float = 0.001,
-        total_timesteps: int = 300_000,
-        verbose: int = 0,
-    ):
-        super().__init__(verbose)
-        self.ent_coef_start = ent_coef_start
-        self.ent_coef_end = ent_coef_end
-        self.total_timesteps = total_timesteps
-
-    def _on_step(self) -> bool:
-        progress = min(self.num_timesteps / self.total_timesteps, 1.0)
-        new_ent_coef = self.ent_coef_start + progress * (
-            self.ent_coef_end - self.ent_coef_start
-        )
-        self.model.ent_coef = float(new_ent_coef)
-        if self.verbose > 0 and self.num_timesteps % 10_000 == 0:
-            print(f"[EntCoef] step={self.num_timesteps:,} ent_coef={new_ent_coef:.4f}")
-        return True
-
+from core.model_trainer import ModelTrainer
 
 def play_done_sound():
-    if winsound is None:
-        return
-    for _ in range(3):
-        winsound.Beep(1000, 300)
-        time.sleep(0.2)
-    winsound.Beep(1500, 500)
-
-
-def build_policy_kwargs(
-    features_dim: int = 256,
-    temporal_extractor: bool = False,
-    window_size: int = WINDOW_SIZE,
-) -> dict:
-    extractor_class = TemporalGnnFeatureExtractor if temporal_extractor else GnnFeatureExtractor
-    extractor_kwargs = dict(features_dim=features_dim)
-    if temporal_extractor:
-        extractor_kwargs.update(
-            dict(window_size=window_size, account_features=NUM_ACCOUNT_FEATURES)
-        )
-    return dict(
-        features_extractor_class=extractor_class,
-        features_extractor_kwargs=extractor_kwargs,
-        net_arch=[256, 256],
-    )
-
-
-def build_model(
-    algo: str,
-    env: TaiwanStockEnv,
-    timesteps: int,
-    temporal_extractor: bool = False,
-    device: str | None = None,
-):
-    if device is None:
-        device = resolve_torch_device(SETTINGS.research.torch_device)
-    else:
-        device = resolve_torch_device(device)
-    print(f"[Device] {describe_torch_device(device)}")
-
-    policy_kwargs = build_policy_kwargs(temporal_extractor=temporal_extractor)
-
-    if algo == "ppo":
-        model = PPO(
-            "MlpPolicy",
-            env,
-            verbose=1,
-            device=device,
-            learning_rate=3e-5,
-            n_steps=512,       # Reduced from 2048: prevents System RAM OOM with 6 workers
-            batch_size=128,    # Reduced from 512 due to PPO RolloutBuffer RAM bloat
-            n_epochs=10,
-            gamma=0.99,
-            gae_lambda=0.95,
-            clip_range=0.20,
-            target_kl=0.08,
-            ent_coef=0.05,
-            policy_kwargs=policy_kwargs,
-        )
-        callback = EntCoefScheduleCallback(
-            ent_coef_start=0.05,
-            ent_coef_end=0.001,
-            total_timesteps=timesteps,
-            verbose=1,
-        )
-        return model, callback
-
-    if algo == "sac":
-        # IndexedReplayBuffer stores t + account block (~2.4KB/transition), not full obs.
-        # Default RAM cap 4GB → buffer can reach full timesteps (300K).
-        # SAC_BUFFER_RAM_GB=1 only for R6 reproduction (legacy 2,805 cap); do not use for R7+.
-        ram_gb = float(os.environ.get("SAC_BUFFER_RAM_GB", "4"))
-
-        bytes_per_transition = estimated_bytes_per_transition(env, optimize_memory=True, storage_dtype=np.float16)
-
-        max_buffer_by_ram = int((ram_gb * 1024**3) / bytes_per_transition)
-        buffer_size = min(timesteps, max_buffer_by_ram)
-
-        print(
-            f"[SAC] IndexedReplayBuffer buffer_size = {buffer_size:,} "
-            f"(~{bytes_per_transition} B/transition, float16 account, optimize_memory=True, "
-            f"est. RAM {buffer_size * bytes_per_transition / 1024**3:.2f} GB)"
-        )
-
-        model = SAC(
-            "MlpPolicy",
-            env,
-            verbose=1,
-            device=device,
-            learning_rate=3e-4,
-            buffer_size=buffer_size,
-            learning_starts=1_000,
-            batch_size=1024,    # Increased from 256 to maximize GPU utilization
-            tau=0.005,
-            gamma=0.99,
-            train_freq=10,
-            gradient_steps=1,
-            ent_coef="auto",
-            optimize_memory_usage=True,
-            policy_kwargs=policy_kwargs,
-            replay_buffer_class=IndexedReplayBuffer,
-            replay_buffer_kwargs=dict(
-                handle_timeout_termination=False,
-                env=env,
-                storage_dtype=np.float16,
-            ),
-        )
-        return model, None
-
-    raise ValueError(f"Unsupported algo: {algo}")
-
+    try:
+        import winsound
+        import time
+        for _ in range(3):
+            winsound.Beep(1000, 300)
+            time.sleep(0.2)
+        winsound.Beep(1500, 500)
+    except Exception:
+        pass
 
 def main(
     tickers=None,
@@ -187,12 +61,15 @@ def main(
     window_size: int = WINDOW_SIZE,
     topk: int = SETTINGS.research.default_topk,
     softmax_temp: float = SETTINGS.research.default_softmax_temp,
+    npz_path: str | None = None,
 ):
     set_random_seed(seed)
     tickers = tickers or TICKERS_TECH_EXPANDED
     algo = algo.lower()
     if enable_cash_action is None:
-        enable_cash_action = SETTINGS.research.default_enable_cash_action or algo == "sac"
+        enable_cash_action = (
+            SETTINGS.research.default_enable_cash_action or algo == "sac"
+        )
     if overnight_feature_path is None:
         overnight_feature_path = SETTINGS.research.overnight_feature_path
     if model_name is None:
@@ -212,37 +89,53 @@ def main(
     print(f"timesteps={timesteps:,}")
     print(f"seed={seed}")
     print(f"train_range={train_start} ~ {train_end}")
+    print(f"npz_path={npz_path}")
 
-    enriched = fetch_multi_asset_data(
-        tickers=tickers,
-        start_date=train_start,
-        end_date=train_end,
-        window_size=window_size,
-        macro_tickers=MACRO_TICKERS_RL,
-        overnight_feature_path=overnight_feature_path,
-    )
+    if npz_path and os.path.exists(npz_path):
+        env = TaiwanStockEnv(
+            npz_path=npz_path,
+            window_size=window_size,
+            initial_balance=1_000_000.0,
+            topk=topk,
+            softmax_temp=softmax_temp,
+            use_benchmark_reward=True,
+            enable_cash_action=enable_cash_action,
+            enable_margin_short=enable_margin_short,
+            max_leverage=SETTINGS.risk_limits.max_leverage,
+        )
+    else:
+        enriched = fetch_multi_asset_data(
+            tickers=tickers,
+            start_date=train_start,
+            end_date=train_end,
+            window_size=window_size,
+            macro_tickers=MACRO_TICKERS_RL,
+            overnight_feature_path=overnight_feature_path,
+        )
 
-    env = TaiwanStockEnv(
-        df_dict=enriched,
-        window_size=window_size,
-        initial_balance=1_000_000.0,
-        topk=topk,
-        softmax_temp=softmax_temp,
-        use_benchmark_reward=True,
-        enable_cash_action=enable_cash_action,
-        enable_margin_short=enable_margin_short,
-        max_leverage=SETTINGS.risk_limits.max_leverage,
-    )
+        env = TaiwanStockEnv(
+            df_dict=enriched,
+            window_size=window_size,
+            initial_balance=1_000_000.0,
+            topk=topk,
+            softmax_temp=softmax_temp,
+            use_benchmark_reward=True,
+            enable_cash_action=enable_cash_action,
+            enable_margin_short=enable_margin_short,
+            max_leverage=SETTINGS.risk_limits.max_leverage,
+        )
     print(f"observation_space={env.observation_space.shape}")
     print(f"action_space={env.action_space.shape}")
 
-    model, callback = build_model(
-        algo,
+    trainer = ModelTrainer(algo, device=SETTINGS.research.torch_device)
+    model, callback = trainer.build_model(
         env,
         timesteps,
         temporal_extractor=temporal_extractor,
+        window_size=window_size,
     )
     t_start = time.time()
+    print("\nStarting training...")
     model.learn(total_timesteps=timesteps, progress_bar=True, callback=callback)
     elapsed = time.time() - t_start
 
@@ -254,7 +147,9 @@ def main(
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--algo", choices=["ppo", "sac"], default=SETTINGS.research.default_algo)
+    parser.add_argument(
+        "--algo", choices=["ppo", "sac"], default=SETTINGS.research.default_algo
+    )
     parser.add_argument("--timesteps", type=int, default=TIMESTEPS)
     parser.add_argument("--model-name", default=None)
     parser.add_argument(
@@ -272,7 +167,12 @@ def parse_args():
         action="store_true",
         help="Enable margin trading and short selling (Tanh + leverage normalization).",
     )
-    parser.add_argument("--seed", type=int, default=SETTINGS.research.default_seed, help="Random seed for training")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=SETTINGS.research.default_seed,
+        help="Random seed for training",
+    )
     parser.add_argument(
         "--overnight-feature-path",
         default=None,
@@ -282,11 +182,16 @@ def parse_args():
     parser.add_argument("--train-end", default=TRAIN_END)
     parser.add_argument("--window-size", type=int, default=WINDOW_SIZE)
     parser.add_argument("--topk", type=int, default=SETTINGS.research.default_topk)
-    parser.add_argument("--softmax-temp", type=float, default=SETTINGS.research.default_softmax_temp)
+    parser.add_argument(
+        "--softmax-temp", type=float, default=SETTINGS.research.default_softmax_temp
+    )
     parser.add_argument(
         "--temporal-extractor",
         action="store_true",
         help="Use GRU-over-window TemporalGnnFeatureExtractor.",
+    )
+    parser.add_argument(
+        "--npz-path", type=str, default=None, help="Path to precompiled .npz dataset"
     )
     return parser.parse_args()
 
@@ -312,4 +217,5 @@ if __name__ == "__main__":
         window_size=args.window_size,
         topk=args.topk,
         softmax_temp=args.softmax_temp,
+        npz_path=args.npz_path,
     )

@@ -20,3 +20,5 @@ optuna>=3.0
 pytest>=8.0
 ruff>=0.4
 mypy>=1.8
+pydantic>=2.5
+pydantic-settings>=2.1

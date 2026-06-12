@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import evaluate_portfolio
+import scripts.evaluate_portfolio as evaluate_portfolio
 import settings
 import train_portfolio
 import walk_forward
