@@ -181,6 +181,7 @@ def build_train_env(
     overnight_feature_path: str | None = None,
     enable_sl_features: bool = False,
     sl_scores: dict | None = None,
+    algo: str = "ppo",
 ) -> tuple[TaiwanStockEnv, dict]:
     """
     Build training environment from period data.
@@ -229,6 +230,7 @@ def build_train_env(
         max_leverage=settings.risk_limits.max_leverage,
         enable_sl_features=enable_sl_features,
         sl_features_by_ticker=sl_feature_arrays,
+        algo=algo,
     )
 
     return train_env, train_data
@@ -276,6 +278,7 @@ def build_eval_env(
     overnight_feature_path: str | None = None,
     enable_sl_features: bool = False,
     sl_scores: dict | None = None,
+    algo: str = "ppo",
 ) -> tuple[TaiwanStockEnv, dict]:
     """
     Build evaluation environment from period data.
@@ -337,6 +340,7 @@ def build_eval_env(
         max_leverage=settings.risk_limits.max_leverage,
         enable_sl_features=enable_sl_features,
         sl_features_by_ticker=sl_feature_arrays,
+        algo=algo,
     )
     
     return test_env, test_data

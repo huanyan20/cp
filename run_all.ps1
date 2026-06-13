@@ -1,13 +1,13 @@
 param(
     [int]$Timesteps = 200000,
     [string]$Seeds = "42,43,44",
-    [int]$Workers = 2
+    [int]$Workers = 1
 )
 
-Write-Host "Running research matrix: PPO/SAC x cash enabled/disabled x seeds $Seeds with $Workers workers"
-.\env\Scripts\python.exe walk_forward.py --matrix --timesteps $Timesteps --seeds $Seeds --workers $Workers
+Write-Host "Running SAC validation: cash enabled x seeds $Seeds with $Workers workers"
+.\env\Scripts\python.exe walk_forward.py --algo sac --cash-mode enabled --timesteps $Timesteps --seeds $Seeds --workers $Workers
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Research matrix failed"
+    Write-Host "SAC validation failed"
     exit $LASTEXITCODE
 }
 

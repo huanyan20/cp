@@ -446,6 +446,7 @@ def _run_single_walk_forward(
                     overnight_feature_path=overnight_feature_path,
                     enable_sl_features=enable_sl_features,
                     sl_scores=sl_scores,
+                    algo=algo,
                 )
 
             train_and_save_model(
@@ -473,6 +474,7 @@ def _run_single_walk_forward(
                 overnight_feature_path=overnight_feature_path,
                 enable_sl_features=enable_sl_features,
                 sl_scores=sl_scores,
+                algo=algo,
             )
 
         # Load trained model

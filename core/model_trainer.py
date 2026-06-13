@@ -128,7 +128,7 @@ class ModelTrainer:
                 env, optimize_memory=True, storage_dtype=np.float16
             )
             max_buffer_by_ram = int((ram_gb * 1024**3) / bytes_per_transition)
-            buffer_size = min(timesteps, max_buffer_by_ram)
+            buffer_size = min(timesteps, max_buffer_by_ram, 100_000)
 
             print(
                 f"[SAC] IndexedReplayBuffer buffer_size = {buffer_size:,} "
@@ -144,12 +144,12 @@ class ModelTrainer:
                 learning_rate=3e-4,
                 buffer_size=buffer_size,
                 learning_starts=1_000,
-                batch_size=2048,
+                batch_size=256,
                 tau=0.005,
                 gamma=0.99,
-                train_freq=10,
-                gradient_steps=-1,
-                ent_coef="auto",
+                train_freq=100,
+                gradient_steps=5,
+                ent_coef=0.005,
                 optimize_memory_usage=True,
                 policy_kwargs=policy_kwargs,
                 replay_buffer_class=IndexedReplayBuffer,

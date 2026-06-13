@@ -57,6 +57,12 @@ def run_eval(
         overnight_feature_path=overnight_feature_path,
     )
 
+    # 針對舊模型：移除新增的 open_return 相關特徵
+    for t, df in enriched.items():
+        cols_to_drop = [c for c in df.columns if c.endswith("open_return")]
+        if cols_to_drop:
+            enriched[t] = df.drop(columns=cols_to_drop)
+
     model_name_lower = model_path.lower()
     if enable_cash_action_override is not None:
         enable_cash_action = enable_cash_action_override
@@ -164,7 +170,6 @@ def run_eval(
         
     trades_history = info.get("trades_history", [])
     if trades_history:
-        import pandas as pd
         trades_path = SETTINGS.paths.results_dir / f"trades_{algo_name}_eval.csv"
         pd.DataFrame(trades_history).to_csv(trades_path, index=False)
         print(f"[V] Trade logs saved to: {trades_path}")
@@ -174,7 +179,7 @@ def run_eval(
     final_obs = env._get_observation()
     final_action, _ = model.predict(final_obs, deterministic=True)
     
-    next_day_target_weights = env._transform_action(final_action)
+    next_day_target_weights = env._raw_transform_action(final_action)
     cash_weight = float(env._cash_weight)
 
     if half_buys:

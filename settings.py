@@ -60,7 +60,7 @@ class ResearchSettings(BaseSettings):
     test_start: str = "2024-01-01"
     window_size: int = 20
     timesteps: int = 300_000
-    algo: str = Field("ppo", validation_alias="RESEARCH_ALGO")
+    algo: str = Field("sac", validation_alias="RESEARCH_ALGO")
     seed: int = Field(42, validation_alias="RESEARCH_SEED")
     seeds: str = Field("42,43,44", validation_alias="RESEARCH_SEEDS")
     tier: str = Field("", validation_alias="RESEARCH_TIER")

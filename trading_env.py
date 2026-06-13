@@ -29,8 +29,8 @@ BORROW_RATE_DAILY = 0.015 / 252
 LAMBDA_COST = 5.0           # Strongly penalize transaction friction
 LAMBDA_TURNOVER = 1.0       # Penalize portfolio churn
 LAMBDA_CASH = 0.0
-LAMBDA_DRAWDOWN = 1.2       # R5: 0.8 → 1.2 — stronger drawdown signal (M1b)
-LAMBDA_CASH_DEFENSIVE = 0.35  # R5: 0.2 → 0.35 — reward defensive cash earlier
+LAMBDA_DRAWDOWN = 2.5       # R6: 1.2 -> 2.5
+LAMBDA_CASH_DEFENSIVE = 0.60  # R6: 0.35 -> 0.60
 REWARD_REF_DD = 0.02        # R5: 3% → 2% buffer — penalty kicks in sooner
 REGIME_DD_THRESHOLD = 0.06  # R5: 8% → 6% — regime exposure penalty earlier
 REGIME_PENALTY_COEF = 1.5   # R5: 1.0 → 1.5 — heavier stock exposure during DD
@@ -83,8 +83,11 @@ class TaiwanStockEnv(gym.Env):
         record_trades: bool = False,
         enable_sl_features: bool = False,
         sl_features_by_ticker: dict | None = None,
+        algo: str = "ppo",
     ):
         super().__init__()
+
+        self.algo = algo.lower()
 
         if df_dict is None and npz_path is None:
             raise ValueError("Must provide either df_dict or npz_path.")
@@ -405,7 +408,13 @@ class TaiwanStockEnv(gym.Env):
 
         # -- Legacy Softmax Mode (Long-Only) --
         shifted = action - np.max(action)
-        exp_a = np.exp(shifted / self._softmax_temp)
+        
+        if self.algo == "sac":
+            # Soft Top-K for SAC: avoid non-differentiable hard masking
+            exp_a = np.exp(shifted / (self._softmax_temp * 0.1)) # Lower temp for sharper concentration natively
+        else:
+            exp_a = np.exp(shifted / self._softmax_temp)
+            
         soft_weights = exp_a / (np.sum(exp_a) + 1e-8)
 
         if self.enable_cash_action:
@@ -415,7 +424,8 @@ class TaiwanStockEnv(gym.Env):
             stock_weights = soft_weights
             cash_weight = 0.0
 
-        if self._topk < self.num_stocks:
+        if self._topk < self.num_stocks and self.algo != "sac":
+            # Hard Top-K Masking (PPO only, SAC fails due to zero gradients at step edge)
             topk_indices = np.argsort(stock_weights)[-self._topk :]
             mask = np.zeros(self.num_stocks, dtype=np.float32)
             mask[topk_indices] = 1.0
