@@ -14,6 +14,13 @@ from trading_env import TaiwanStockEnv
 
 PERIODS = [
     {
+        "name": "2022_BEAR",
+        "train_start": "2018-01-01",
+        "train_end": "2021-12-31",
+        "test_start": "2022-01-01",
+        "test_end": "2022-12-31",
+    },
+    {
         "name": "2024H2",
         "train_start": "2020-01-01",
         "train_end": "2024-06-30",

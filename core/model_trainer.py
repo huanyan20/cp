@@ -7,6 +7,7 @@ from gnn_extractor import GnnFeatureExtractor, TemporalGnnFeatureExtractor
 from settings import resolve_torch_device, describe_torch_device, SETTINGS
 from trading_env import NUM_ACCOUNT_FEATURES
 from indexed_replay_buffer import IndexedReplayBuffer, estimated_bytes_per_transition
+from core.equivariant_policy import EquivariantActorCriticPolicy
 
 
 class EntCoefScheduleCallback(BaseCallback):
@@ -36,23 +37,41 @@ class EntCoefScheduleCallback(BaseCallback):
 
 
 def build_policy_kwargs(
-    features_dim: int = 256,
+    algo: str = "ppo",
+    features_dim: int = 256,  # Legacy, overwritten below
     temporal_extractor: bool = False,
     window_size: int = 20,
+    num_stocks: int = 45,
+    enable_cash_action: bool = False,
 ) -> dict:
+    embed_dim = 64
+    actual_features_dim = num_stocks * embed_dim
+
     extractor_class = (
         TemporalGnnFeatureExtractor if temporal_extractor else GnnFeatureExtractor
     )
-    extractor_kwargs = dict(features_dim=features_dim)
+    extractor_kwargs = dict(features_dim=actual_features_dim)
     if temporal_extractor:
         extractor_kwargs.update(
             dict(window_size=window_size, account_features=NUM_ACCOUNT_FEATURES)
         )
-    return dict(
+
+    kwargs = dict(
         features_extractor_class=extractor_class,
         features_extractor_kwargs=extractor_kwargs,
-        net_arch=[256, 256],
+        net_arch=[],  # Empty to prevent MlpExtractor from mixing features across stocks
     )
+
+    if algo == "ppo":
+        kwargs.update(
+            dict(
+                num_stocks=num_stocks,
+                embed_dim=embed_dim,
+                enable_cash_action=enable_cash_action,
+            )
+        )
+
+    return kwargs
 
 
 class ModelTrainer:
@@ -70,12 +89,16 @@ class ModelTrainer:
         window_size: int = 20,
     ):
         policy_kwargs = build_policy_kwargs(
-            temporal_extractor=temporal_extractor, window_size=window_size
+            algo=self.algo,
+            temporal_extractor=temporal_extractor,
+            window_size=window_size,
+            num_stocks=getattr(env, "num_stocks", 45),
+            enable_cash_action=getattr(env, "enable_cash_action", False),
         )
 
         if self.algo == "ppo":
             model = PPO(
-                "MlpPolicy",
+                EquivariantActorCriticPolicy,
                 env,
                 verbose=1,
                 device=self.device,

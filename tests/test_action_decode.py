@@ -50,17 +50,17 @@ class ActionDecodeM1dTests(unittest.TestCase):
 
     def test_higher_temp_reduces_peak_weight(self):
         action = _dominant_action(6)
-        hot = make_env(softmax_temp=0.5)._transform_action(action)
-        mild = make_env(softmax_temp=1.0)._transform_action(action)
+        hot = make_env(softmax_temp=0.5)._raw_transform_action(action)
+        mild = make_env(softmax_temp=1.0)._raw_transform_action(action)
         self.assertGreater(float(np.max(hot)), float(np.max(mild)))
 
     def test_r51_decode_less_concentrated_than_legacy_temp_half(self):
         action = _dominant_action(45, cash=True)
         legacy = make_env(softmax_temp=0.5, num_stocks=45, enable_cash_action=True)
         with patch.object(trading_env, "MIN_TOP_K_WEIGHT", 0.0):
-            legacy_w = legacy._transform_action(action)
+            legacy_w = legacy._raw_transform_action(action)
         current = make_env(softmax_temp=1.0, num_stocks=45, enable_cash_action=True)
-        current_w = current._transform_action(action)
+        current_w = current._raw_transform_action(action)
         self.assertGreater(float(np.max(legacy_w)), 0.9)
         self.assertLess(float(np.max(current_w)), float(np.max(legacy_w)))
 
@@ -68,8 +68,8 @@ class ActionDecodeM1dTests(unittest.TestCase):
         env_hot = make_env(softmax_temp=0.5, num_stocks=6, enable_cash_action=True)
         env_mild = make_env(softmax_temp=1.0, num_stocks=6, enable_cash_action=True)
         action = _dominant_action(6, cash=True)
-        hot = env_hot._transform_action(action)
-        mild = env_mild._transform_action(action)
+        hot = env_hot._raw_transform_action(action)
+        mild = env_mild._raw_transform_action(action)
         self.assertGreater(float(np.max(hot)), float(np.max(mild)))
 
 
@@ -77,9 +77,9 @@ class ActionDecodeM1cTests(unittest.TestCase):
     def test_entropy_floor_reduces_peak_vs_no_floor(self):
         env = make_env(softmax_temp=1.0, num_stocks=6)
         action = np.array([5.0, -5.0, -5.0, -5.0, -5.0, -5.0], dtype=np.float32)
-        with_floor = env._transform_action(action)
+        with_floor = env._raw_transform_action(action)
         with patch.object(trading_env, "MIN_TOP_K_WEIGHT", 0.0):
-            no_floor = make_env(softmax_temp=1.0, num_stocks=6)._transform_action(action)
+            no_floor = make_env(softmax_temp=1.0, num_stocks=6)._raw_transform_action(action)
         self.assertLess(float(np.max(with_floor)), float(np.max(no_floor)))
 
     def test_top_k_floor_enforces_minimum_mass_before_renormalize(self):

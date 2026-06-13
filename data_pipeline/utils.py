@@ -27,6 +27,7 @@ BASE_FEATURE_COLS = [
     "OBV_norm",
     "MFI_norm",
     "log_return",
+    "open_return",
     "mom_60d",
     "ma60_bias",
 ]

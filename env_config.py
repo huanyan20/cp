@@ -8,8 +8,8 @@ from typing import Any
 
 import trading_env
 
-# Bump manually when reward / regime logic changes intentionally (e.g. r4, r5).
-ENV_CONFIG_VERSION = "r5.2"
+# Bump manually when reward / regime logic changes intentionally (e.g. r4, r5, r6).
+ENV_CONFIG_VERSION = "r6.0"
 
 
 def build_env_config_snapshot(

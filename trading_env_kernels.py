@@ -26,6 +26,7 @@ def execute_trades_kernel(
     commission_rate: float,
     tax_rate_sell: float,
     slippage_rate: float,
+    slippage_multiplier: float,
 ) -> tuple:
     """
     Returns (total_cost_ratio, new_portfolio_value, turnover, new_positions, new_trade_returns).
@@ -44,7 +45,8 @@ def execute_trades_kernel(
         if delta < 1e-4:
             continue
         trade_amount = delta * portfolio_value
-        cost = trade_amount * (commission_rate + slippage_rate)
+        dynamic_slippage = slippage_rate + slippage_multiplier * (delta ** 2)
+        cost = trade_amount * (commission_rate + dynamic_slippage)
         if target < current:
             cost += trade_amount * tax_rate_sell
         total_cost += cost
@@ -194,4 +196,4 @@ def compute_reward_kernel(
         - whipsaw_p
         + cash_defensive_bonus
     )
-    return max(-5.0, min(5.0, raw))
+    return max(-10.0, min(10.0, raw))

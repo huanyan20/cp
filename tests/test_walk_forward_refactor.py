@@ -33,7 +33,7 @@ class WalkForwardRefactorTests(unittest.TestCase):
 
     def test_build_period_plan_keeps_default_periods(self):
         periods = build_period_plan(today="2026-06-06")
-        self.assertEqual(periods[0]["name"], "2024H2")
+        self.assertEqual(periods[0]["name"], "2022_BEAR")
         self.assertTrue(any("effective_test_end" in p for p in periods))
 
     def test_feature_suffix_matches_existing_result_names(self):

@@ -1,7 +1,7 @@
 param(
-    [int]$Timesteps = 300000,
+    [int]$Timesteps = 200000,
     [string]$Seeds = "42,43,44",
-    [int]$Workers = 4
+    [int]$Workers = 2
 )
 
 Write-Host "Running research matrix: PPO/SAC x cash enabled/disabled x seeds $Seeds with $Workers workers"
@@ -9,6 +9,15 @@ Write-Host "Running research matrix: PPO/SAC x cash enabled/disabled x seeds $Se
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Research matrix failed"
     exit $LASTEXITCODE
+}
+
+Write-Host "Running SL baseline..."
+foreach ($seed in $Seeds.Split(",")) {
+    .\env\Scripts\python.exe -m sl_pipeline.walk_forward_sl --allocator rule --seed $seed
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "SL baseline failed for seed $seed"
+        exit $LASTEXITCODE
+    }
 }
 
 Write-Host "Generating experiment report..."

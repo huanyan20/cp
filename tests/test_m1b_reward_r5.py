@@ -65,9 +65,9 @@ def make_df(rows: int = 80) -> pd.DataFrame:
 
 class M1bRewardR5Tests(unittest.TestCase):
     def test_env_config_version_is_r5(self):
-        self.assertEqual(env_config.ENV_CONFIG_VERSION, "r5.1")
+        self.assertEqual(env_config.ENV_CONFIG_VERSION, "r6.0")
         snap = build_env_config_snapshot()
-        self.assertEqual(snap["version"], "r5.1")
+        self.assertEqual(snap["version"], "r6.0")
         self.assertEqual(snap["lambda_drawdown"], trading_env.LAMBDA_DRAWDOWN)
         self.assertEqual(snap["reward_ref_dd"], trading_env.REWARD_REF_DD)
         self.assertEqual(snap["regime_dd_threshold"], trading_env.REGIME_DD_THRESHOLD)
@@ -125,7 +125,7 @@ class M1bRewardR5Tests(unittest.TestCase):
 
         prev = env._portfolio_value
         env._portfolio_value *= 1.005
-        reward = env._compute_reward(prev, env._portfolio_value, trade_cost=0.0)
+        reward = env._compute_reward(prev, env._portfolio_value, trade_cost=0.0, whipsaw_penalty=0.0)
 
         self.assertLess(reward, 0.05)
 

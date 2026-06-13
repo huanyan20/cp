@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from data_loader import fetch_multi_asset_data
+from data_pipeline.universe_builder import get_universe_builder
 from metrics_utils import calculate_metrics
 from research_pipeline import PERIODS, build_period_plan, write_metrics_json
 from settings import load_settings
@@ -25,9 +26,12 @@ from sl_pipeline.rule_based_allocator import (
     RuleBasedAllocator,
     RuleBasedAllocatorConfig,
 )
-from sl_pipeline.signal_generator import SignalGenerator, SignalGeneratorConfig
+from sl_pipeline.signal_generator import (
+    DEFAULT_LGBM_PARAMS,
+    SignalGenerator,
+    SignalGeneratorConfig,
+)
 from stock_universe import MACRO_TICKERS_RL
-from data_pipeline.universe_builder import get_universe_builder
 
 SETTINGS = load_settings()
 
@@ -48,7 +52,9 @@ def resolve_period(name: str) -> dict:
 def build_allocator(name: str) -> RuleBasedAllocator:
     key = (name or "rule").strip().lower()
     if key != "rule":
-        raise ValueError(f"Unsupported allocator {name!r}; only 'rule' is implemented in S2.")
+        raise ValueError(
+            f"Unsupported allocator {name!r}; only 'rule' is implemented in S2."
+        )
     return RuleBasedAllocator(
         RuleBasedAllocatorConfig(
             top_k=SETTINGS.research.default_topk,
@@ -96,7 +102,11 @@ def run_single_period(
         macro_tickers=MACRO_TICKERS_RL,
     )
 
-    generator = SignalGenerator(SignalGeneratorConfig(horizon=horizon))
+    lgbm_params = dict(DEFAULT_LGBM_PARAMS)
+    lgbm_params["random_state"] = seed
+    generator = SignalGenerator(
+        SignalGeneratorConfig(horizon=horizon, lgbm_params=lgbm_params)
+    )
     scores, summary = generator.fit_period(
         train_data,
         test_data,
@@ -121,9 +131,9 @@ def run_single_period(
         "scores_path": str(scores_path),
         "summary_path": str(summary_path),
         "n_tickers": len(scores),
-        "n_oos_days": int(wide.shape[0]),
-        "score_mean": float(wide.mean().mean()),
-        "score_std": float(wide.stack().std()),
+        "n_oos_days": wide.shape[0],
+        "score_mean": wide.mean().mean(),
+        "score_std": float(np.nanstd(np.asarray(wide, dtype=float))),
         "summary": json.loads(summary_path.read_text(encoding="utf-8")),
     }
 
@@ -150,7 +160,9 @@ def run_single_period(
             "metrics": period_metrics,
         }
         metrics_path = out_dir / f"metrics_{period_name}_h{horizon}.json"
-        metrics_path.write_text(json.dumps(period_metrics, indent=2, ensure_ascii=False), encoding="utf-8")
+        metrics_path.write_text(
+            json.dumps(period_metrics, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
         result["period_metrics_path"] = str(metrics_path)
 
         if write_metrics:
@@ -163,12 +175,16 @@ def run_single_period(
             seed_metrics["periods"][period_name] = period_metrics
             seed_metrics["overall"] = period_metrics
             out_results = results_dir or SETTINGS.paths.results_dir
-            path = sl_metrics_path(out_results, horizon=horizon, seed=seed, allocator=allocator_name)
+            path = sl_metrics_path(
+                out_results, horizon=horizon, seed=seed, allocator=allocator_name
+            )
             write_metrics_json(seed_metrics, str(path))
             result["metrics_path"] = str(path)
 
     manifest_path = out_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     return result
 
 
@@ -187,7 +203,9 @@ def run_walk_forward_sl(
     if tickers is None:
         builder = get_universe_builder("dynamic")
         # Initialize default but dynamically update per period if requested
-        tickers = builder.build_universe(plan[0]["name"][:4] + "-01-01", top_n=45) # Fallback baseline
+        tickers = builder.build_universe(
+            plan[0]["name"][:4] + "-01-01", top_n=45
+        )  # Fallback baseline
 
     seed_metrics = build_sl_seed_metrics(
         horizon=horizon,
@@ -228,7 +246,11 @@ def run_walk_forward_sl(
             macro_tickers=MACRO_TICKERS_RL,
         )
 
-        generator = SignalGenerator(SignalGeneratorConfig(horizon=horizon))
+        lgbm_params = dict(DEFAULT_LGBM_PARAMS)
+        lgbm_params["random_state"] = seed
+        generator = SignalGenerator(
+            SignalGeneratorConfig(horizon=horizon, lgbm_params=lgbm_params)
+        )
         scores, _ = generator.fit_period(
             train_data,
             test_data,
@@ -276,12 +298,14 @@ def run_walk_forward_sl(
         all_cash_weights,
         all_daily_returns,
         all_turnover,
-        period_tickers, # Note: strictly we should pass dynamic per-day tickers to overall metrics, but period_tickers from last fold is a fallback.
+        period_tickers,  # Note: strictly we should pass dynamic per-day tickers to overall metrics, but period_tickers from last fold is a fallback.
     )
     seed_metrics["overall"] = overall_metrics
 
     out_results = results_dir or SETTINGS.paths.results_dir
-    path = sl_metrics_path(out_results, horizon=horizon, seed=seed, allocator=allocator_name)
+    path = sl_metrics_path(
+        out_results, horizon=horizon, seed=seed, allocator=allocator_name
+    )
     write_metrics_json(seed_metrics, str(path))
 
     if output_dir:
@@ -335,10 +359,18 @@ def run_walk_forward_sl(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="SL walk-forward: LightGBM scores + rule allocator backtest")
-    parser.add_argument("--period", default=None, help="Single period name (omit for all planned periods)")
+    parser = argparse.ArgumentParser(
+        description="SL walk-forward: LightGBM scores + rule allocator backtest"
+    )
+    parser.add_argument(
+        "--period",
+        default=None,
+        help="Single period name (omit for all planned periods)",
+    )
     parser.add_argument("--horizon", type=int, default=5, choices=(5, 10))
-    parser.add_argument("--allocator", default=None, help="S2: rule-based allocator (use 'rule')")
+    parser.add_argument(
+        "--allocator", default=None, help="S2: rule-based allocator (use 'rule')"
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument(
@@ -425,7 +457,11 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(payload, indent=2))
     if "promotion_gate" in result:
         status = "APPROVED" if result["promotion_gate"]["can_promote"] else "BLOCKED"
-        safe_summary = result['promotion_gate']['summary'].replace('\u2713', '[PASS]').replace('\u2717', '[FAIL]')
+        safe_summary = (
+            result["promotion_gate"]["summary"]
+            .replace("\u2713", "[PASS]")
+            .replace("\u2717", "[FAIL]")
+        )
         print(f"\nSL Promotion Gate: {status} - {safe_summary}")
     return 0
 

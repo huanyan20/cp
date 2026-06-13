@@ -243,8 +243,9 @@ class SlBacktestTests(unittest.TestCase):
             {"A": 0.0},
             {"A": 0.5},
             ["A"],
+            {"A": 0.0},
         )
-        self.assertGreater(turnover, 0.0)
+        self.assertEqual(turnover, 0.5)
         self.assertLess(new_value, 1.0)
         self.assertAlmostEqual(weights["A"], 0.5)
 

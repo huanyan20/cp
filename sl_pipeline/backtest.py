@@ -13,7 +13,7 @@ from metrics_utils import calculate_metrics
 from research_pipeline import write_metrics_json
 from settings import load_settings
 from sl_pipeline.allocator import MarketContext, PortfolioAllocator, PortfolioState
-from trading_env import COMMISSION_RATE, SLIPPAGE_RATE, TAX_RATE_SELL
+from trading_env import COMMISSION_RATE, SLIPPAGE_RATE, TAX_RATE_SELL, SLIPPAGE_MULTIPLIER
 
 if TYPE_CHECKING:
     from settings import AppSettings
@@ -63,9 +63,10 @@ def build_trading_calendar(
 
 def trade_cost_rate(prev_weight: float, target_weight: float) -> float:
     """One-way cost rate for a weight change (commission + slippage + sell tax)."""
-    if abs(target_weight - prev_weight) < 1e-8:
+    delta = abs(target_weight - prev_weight)
+    if delta < 1e-8:
         return 0.0
-    rate = COMMISSION_RATE + SLIPPAGE_RATE
+    rate = COMMISSION_RATE + SLIPPAGE_RATE + SLIPPAGE_MULTIPLIER * (delta ** 2)
     if target_weight < prev_weight:
         rate += TAX_RATE_SELL
     return rate
@@ -76,6 +77,7 @@ def execute_rebalance(
     prev_weights: dict[str, float],
     target_weights: dict[str, float],
     tickers: list[str],
+    open_returns: dict[str, float],
 ) -> tuple[dict[str, float], float, float]:
     """Apply target weights, deduct friction, return (weights, turnover, new_value)."""
     turnover = 0.0
@@ -85,6 +87,15 @@ def execute_rebalance(
     for ticker in tickers:
         prev = float(prev_weights.get(ticker, 0.0))
         target = float(target_weights.get(ticker, 0.0))
+        
+        # Apply Limit Up/Down Blocking at Open
+        open_r = open_returns.get(ticker, 0.0)
+        if np.isfinite(open_r):
+            if open_r >= 0.095 and target > prev:
+                target = prev  # Block buying if limit up
+            elif open_r <= -0.095 and target < prev:
+                target = prev  # Block selling if limit down
+
         delta = abs(target - prev)
         turnover += delta
         if delta > 1e-8:
@@ -94,27 +105,6 @@ def execute_rebalance(
 
     new_value = max(portfolio_value - total_cost, 1e-12)
     return final_weights, turnover, new_value
-
-
-def portfolio_simple_return(
-    weights: dict[str, float],
-    enriched: dict[str, pd.DataFrame],
-    tickers: list[str],
-    date: pd.Timestamp,
-) -> float:
-    """Simple return on ``date`` for held weights (long-only)."""
-    total = 0.0
-    for ticker in tickers:
-        weight = float(weights.get(ticker, 0.0))
-        if weight <= 1e-8 or ticker not in enriched:
-            continue
-        df = enriched[ticker]
-        if date not in df.index:
-            continue
-        log_r = float(df.loc[date, "log_return"])
-        if np.isfinite(log_r):
-            total += weight * (float(np.exp(log_r)) - 1.0)
-    return total
 
 
 def build_vols_as_of(
@@ -195,17 +185,51 @@ def simulate_period(
         )
         target = allocator.allocate(score_row, vols, state, market_context)
 
+        open_returns = {}
+        log_returns = {}
+        for ticker in tickers:
+            if ticker in enriched and return_date in enriched[ticker].index:
+                # get() allows fallback if open_return is missing for older parquet caches
+                open_returns[ticker] = float(enriched[ticker].loc[return_date].get("open_return", enriched[ticker].loc[return_date, "log_return"]))
+                log_returns[ticker] = float(enriched[ticker].loc[return_date, "log_return"])
+            else:
+                open_returns[ticker] = 0.0
+                log_returns[ticker] = 0.0
+
+        # Apply overnight drift to PV and weights
+        daily_open_rets = {t: np.exp(open_returns[t]) - 1.0 for t in tickers}
+        overnight_pnl = sum(portfolio_value * positions.get(t, 0.0) * daily_open_rets[t] for t in tickers)
+        
         prev_value = portfolio_value
+        portfolio_value += overnight_pnl
+        
+        if portfolio_value > 1e-8:
+            positions = {
+                t: (positions.get(t, 0.0) * prev_value * (1.0 + daily_open_rets[t])) / portfolio_value
+                for t in tickers if abs(positions.get(t, 0.0)) > 1e-8
+            }
+        else:
+            positions = {}
+
         positions, turnover, portfolio_value = execute_rebalance(
             portfolio_value,
             positions,
             target.target_weights,
             tickers,
+            open_returns,
         )
-        cash_weight = float(target.cash_weight)
+        cash_weight = max(0.0, 1.0 - sum(positions.values()))
 
-        day_ret = portfolio_simple_return(positions, enriched, tickers, return_date)
-        portfolio_value = max(portfolio_value * (1.0 + day_ret), 1e-12)
+        # Intraday return
+        intraday_pnl = 0.0
+        for ticker in tickers:
+            weight = positions.get(ticker, 0.0)
+            if weight <= 1e-8:
+                continue
+            intraday_ret = np.exp(log_returns[ticker] - open_returns[ticker]) - 1.0
+            intraday_pnl += portfolio_value * weight * intraday_ret
+            
+        portfolio_value = max(portfolio_value + intraday_pnl, 1e-12)
         if portfolio_value > peak_value:
             peak_value = portfolio_value
 

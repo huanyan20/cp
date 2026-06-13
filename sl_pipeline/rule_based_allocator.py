@@ -19,8 +19,10 @@ class RuleBasedAllocatorConfig:
     top_k: int = 5
     hysteresis_rank: int = 10
     weight_band: float = 0.05
+    enable_vol_target: bool = False
     target_vol_annual: float = 0.18
     vol_floor: float = 0.05
+    weighting_method: str = "inv_vol"  # 'inv_vol' or 'equal'
     yellow_mdd: float = 0.10
     yellow_max_exposure: float = 0.50
     red_mdd: float = 0.15
@@ -65,21 +67,32 @@ class RuleBasedAllocator(PortfolioAllocator):
             reverse=True,
         )
 
-        inv_vol: dict[str, float] = {}
-        for ticker in selected_sorted:
-            vol = max(float(vols.get(ticker, cfg.vol_floor)), cfg.vol_floor)
-            inv_vol[ticker] = 1.0 / vol
+        raw_weights: dict[str, float] = {}
+        if cfg.weighting_method == "equal":
+            n_selected = len(selected_sorted)
+            if n_selected > 0:
+                raw_weights = {ticker: 1.0 / n_selected for ticker in selected_sorted}
+        else:
+            inv_vol: dict[str, float] = {}
+            for ticker in selected_sorted:
+                vol = max(float(vols.get(ticker, cfg.vol_floor)), cfg.vol_floor)
+                inv_vol[ticker] = 1.0 / vol
 
-        inv_sum = sum(inv_vol.values())
-        if inv_sum <= 0:
+            inv_sum = sum(inv_vol.values())
+            if inv_sum > 0:
+                raw_weights = {ticker: inv_vol[ticker] / inv_sum for ticker in selected_sorted}
+
+        if not raw_weights:
             return TargetPortfolio(target_weights={}, cash_weight=1.0)
 
-        raw_weights = {ticker: inv_vol[ticker] / inv_sum for ticker in selected_sorted}
         raw_weights = self._cap_single_names(raw_weights, cfg.max_single_weight)
         raw_weights = self._renormalize(raw_weights)
 
-        portfolio_vol = self._estimate_portfolio_vol(raw_weights, vols, cfg.vol_floor)
-        exposure = min(1.0, cfg.target_vol_annual / max(portfolio_vol, cfg.vol_floor))
+        exposure = 1.0
+        if cfg.enable_vol_target:
+            portfolio_vol = self._estimate_portfolio_vol(raw_weights, vols, cfg.vol_floor)
+            exposure = min(1.0, cfg.target_vol_annual / max(portfolio_vol, cfg.vol_floor))
+            
         exposure = self._apply_mdd_cap(exposure, state.rolling_mdd, cfg)
         exposure = self._apply_macro_cap(exposure, market_context)
 

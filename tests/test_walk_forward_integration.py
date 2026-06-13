@@ -35,8 +35,8 @@ def test_walk_forward_initialization():
 
     # Test period planning
     periods = build_period_plan(today="2026-06-07")
-    assert len(periods) == 4, f"Expected 4 periods, got {len(periods)}"
-    assert periods[0]["name"] == "2024H2"
+    assert len(periods) == 5, f"Expected 5 periods, got {len(periods)}"
+    assert periods[0]["name"] == "2022_BEAR"
     assert "effective_test_end" in periods[0]
     assert "effective_train_end" in periods[0]
     print("✓ build_period_plan works")

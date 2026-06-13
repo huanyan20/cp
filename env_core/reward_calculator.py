@@ -183,5 +183,5 @@ class RewardCalculator:
         return float(np.clip(
             hybrid_reward - cost_p - turnover_p - cash_p
             - drawdown_p - regime_penalty - whipsaw_p + cash_defensive_bonus,
-            -5.0, 5.0,
+            -10.0, 10.0,
         ))

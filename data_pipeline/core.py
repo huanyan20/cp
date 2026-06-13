@@ -109,6 +109,7 @@ def fetch_and_process_data(
 
     # 正規化
     df["log_return"] = np.log(df["Close"] / df["Close"].shift(1))
+    df["open_return"] = np.log(df["Open"] / df["Close"].shift(1))
 
     bbm = df["BBM_20_2.0_2.0"]
     for col in ["Open", "High", "Low", "Close"]:

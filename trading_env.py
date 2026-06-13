@@ -23,6 +23,7 @@ except Exception:  # pragma: no cover
 COMMISSION_RATE = 0.001425
 TAX_RATE_SELL = 0.003
 SLIPPAGE_RATE = 0.001
+SLIPPAGE_MULTIPLIER = 0.05
 BORROW_RATE_DAILY = 0.015 / 252
 
 LAMBDA_COST = 5.0           # Strongly penalize transaction friction
@@ -103,6 +104,7 @@ class TaiwanStockEnv(gym.Env):
             data = np.load(npz_path, allow_pickle=True)
             self._full_market_data = data["market_data"]
             self._full_log_returns = data["log_returns"]
+            self._full_open_returns = data["open_returns"] if "open_returns" in data else data["log_returns"]
             self.tickers = list(data["tickers"])
             self._full_dates = data["dates"]
             self.num_stocks = self._full_market_data.shape[1]
@@ -124,6 +126,10 @@ class TaiwanStockEnv(gym.Env):
             )
             self._full_log_returns = np.stack(
                 [self.dfs[t]["log_return"].to_numpy(dtype=np.float64) for t in self.tickers],
+                axis=1,
+            )
+            self._full_open_returns = np.stack(
+                [self.dfs[t].get("open_return", self.dfs[t]["log_return"]).to_numpy(dtype=np.float64) for t in self.tickers],
                 axis=1,
             )
 
@@ -212,6 +218,7 @@ class TaiwanStockEnv(gym.Env):
 
         self._market_data = self._full_market_data[start_idx:end_idx]
         self._log_returns = self._full_log_returns[start_idx:end_idx]
+        self._open_returns = self._full_open_returns[start_idx:end_idx]
         self.dates = self._full_dates[start_idx:end_idx]
         self.max_steps = self._market_data.shape[0]
 
@@ -228,9 +235,57 @@ class TaiwanStockEnv(gym.Env):
         return self._get_observation(), self._get_info()
 
     def step(self, action: np.ndarray, bypass_action_transform: bool = False):
-        target_positions = self._transform_action(action, bypass_action_transform)
+        raw_target_positions = self._raw_transform_action(action, bypass_action_transform)
+
+        self._current_step += 1
+        terminated = self._current_step >= self.max_steps - 1
+
+        if terminated:
+            open_returns = np.zeros(self.num_stocks)
+            log_returns = np.zeros(self.num_stocks)
+        else:
+            open_returns = self._open_returns[self._current_step]
+            log_returns = self._log_returns[self._current_step]
+
+        # 1. Apply overnight return to current positions (PV drifts to Open price)
+        daily_open_rets = np.exp(open_returns) - 1.0
+        overnight_pnl = np.sum(self._portfolio_value * self._positions * daily_open_rets)
         
-        # Calculate Whipsaw Penalty: Selling when holding period is less than 3 days
+        prev_pv = self._portfolio_value
+        self._portfolio_value += overnight_pnl
+        
+        if self._portfolio_value > 1e-8:
+            self._positions = (self._positions * prev_pv * (1.0 + daily_open_rets)) / self._portfolio_value
+            self._cash_weight = max(0.0, 1.0 - float(np.sum(np.abs(self._positions))))
+        else:
+            self._positions = np.zeros(self.num_stocks, dtype=np.float32)
+            self._cash_weight = 1.0
+
+        active_mask = np.abs(self._positions) > 1e-4
+        if np.any(active_mask):
+            d_open = np.where(self._positions > 0, daily_open_rets, -daily_open_rets)
+            self._trade_returns[active_mask] = (1.0 + self._trade_returns[active_mask]) * (1.0 + d_open[active_mask]) - 1.0
+
+        # 2. Action deadband and Limit Up/Down Blocking at Open price
+        weight_diff = np.abs(raw_target_positions - self._positions)
+        target_positions = np.where(weight_diff < ACTION_DEADBAND, self._positions, raw_target_positions)
+        
+        is_limit_up = open_returns >= 0.095
+        is_limit_down = open_returns <= -0.095
+        
+        target_positions = np.where(is_limit_up & (target_positions > self._positions), self._positions, target_positions)
+        target_positions = np.where(is_limit_down & (target_positions < self._positions), self._positions, target_positions)
+        
+        if self.enable_margin_short:
+            self._cash_weight = 1.0 - float(np.sum(target_positions))
+        elif self.enable_cash_action:
+            self._cash_weight = max(0.0, 1.0 - float(np.sum(target_positions)))
+        else:
+            self._cash_weight = 0.0
+            
+        target_positions = target_positions.astype(np.float32)
+
+        # 3. Calculate penalties and execute trades
         whipsaw_penalty = 0.0
         for i in range(self.num_stocks):
             if target_positions[i] < self._positions[i]:
@@ -240,35 +295,19 @@ class TaiwanStockEnv(gym.Env):
                     
         trade_cost = self._execute_trades(target_positions)
 
-        benchmark_top3_idx = None
-        if self.use_benchmark_reward and self._current_step >= _BENCHMARK_LOOKBACK:
-            bm_scores = self._log_returns[
-                self._current_step - _BENCHMARK_LOOKBACK : self._current_step
-            ].sum(axis=0)
-            benchmark_top3_idx = np.argsort(bm_scores)[-_BENCHMARK_TOPK:]
-
-        self._current_step += 1
-        terminated = self._current_step >= self.max_steps - 1
-
-        log_returns = (
-            np.zeros(self.num_stocks)
-            if terminated
-            else self._log_returns[self._current_step]
-        )
-
+        # 4. Intraday execution and return
+        intraday_log_returns = log_returns - open_returns
+        
         self._benchmark_log_r = (
-            float(np.mean(log_returns[benchmark_top3_idx]))
-            if benchmark_top3_idx is not None
+            float(np.mean(log_returns))
+            if self.use_benchmark_reward
             else 0.0
         )
 
-        prev_value = self._portfolio_value
-        self._update_portfolio(log_returns)
-        # NOTE: _pomdp_cache is set inside _compute_reward() AFTER appending
-        # log_r to return_history (so sortino is fresh). _get_observation then
-        # reads the cache without recomputing.
+        self._update_portfolio(intraday_log_returns)
+        
         reward = self._compute_reward(
-            prev_value, self._portfolio_value, trade_cost, whipsaw_penalty
+            prev_pv, self._portfolio_value, trade_cost, whipsaw_penalty
         )
 
         self._holding_periods = np.where(
@@ -308,25 +347,6 @@ class TaiwanStockEnv(gym.Env):
         self._last_turnover = 0.0
         self.trades_history = []
         self._reward_calculator.reset_state()
-
-    def _transform_action(
-        self, action: np.ndarray, bypass_action_transform: bool = False
-    ) -> np.ndarray:
-        target_positions = self._raw_transform_action(action, bypass_action_transform)
-        
-        # Apply Action Deadband
-        weight_diff = np.abs(target_positions - self._positions)
-        target_positions = np.where(weight_diff < ACTION_DEADBAND, self._positions, target_positions)
-        
-        # Recalculate cash_weight consistently based on actual target_positions
-        if self.enable_margin_short:
-            self._cash_weight = 1.0 - float(np.sum(target_positions))
-        elif self.enable_cash_action:
-            self._cash_weight = max(0.0, 1.0 - float(np.sum(target_positions)))
-        else:
-            self._cash_weight = 0.0
-            
-        return target_positions.astype(np.float32)
 
     def _raw_transform_action(
         self, action: np.ndarray, bypass_action_transform: bool = False
@@ -422,6 +442,7 @@ class TaiwanStockEnv(gym.Env):
                 COMMISSION_RATE,
                 TAX_RATE_SELL,
                 SLIPPAGE_RATE,
+                SLIPPAGE_MULTIPLIER,
             )
             self._last_turnover = float(turnover)
             self._positions = new_pos
@@ -437,8 +458,10 @@ class TaiwanStockEnv(gym.Env):
             current = float(self._positions[i])
             if abs(target - current) < 1e-4:
                 continue
-            trade_amount = abs(target - current) * self._portfolio_value
-            cost = trade_amount * (COMMISSION_RATE + SLIPPAGE_RATE)
+            trade_weight = abs(target - current)
+            trade_amount = trade_weight * self._portfolio_value
+            dynamic_slippage = SLIPPAGE_RATE + SLIPPAGE_MULTIPLIER * (trade_weight ** 2)
+            cost = trade_amount * (COMMISSION_RATE + dynamic_slippage)
             if target < current:
                 cost += trade_amount * TAX_RATE_SELL
             total_cost += cost
