@@ -9,7 +9,7 @@ from typing import Any
 import trading_env
 
 # Bump manually when reward / regime logic changes intentionally (e.g. r4, r5, r6, r7).
-ENV_CONFIG_VERSION = "r7.0"
+ENV_CONFIG_VERSION = "r5.1"
 
 
 def build_env_config_snapshot(

@@ -81,6 +81,8 @@ def build_period_plan(periods=None, today=None):
     return clamp_periods(periods=periods, today=today)
 
 
+from env_config import ENV_CONFIG_VERSION
+
 def build_artifact_paths(
     algo: str,
     cash_mode: str,
@@ -90,9 +92,9 @@ def build_artifact_paths(
     period_name: str = "2024H2",
 ) -> dict[str, str]:
     """Centralize the artifact file names for walk-forward runs."""
-    metrics_path = f"{results_dir}/metrics_{algo}_{cash_mode}{feature_suffix}_wf_seed{seed}.json"
-    model_path = f"{results_dir}/wf_{algo}_{cash_mode}{feature_suffix}_model_{period_name}_seed{seed}"
-    chart_path = f"{results_dir}/walk_forward_{algo}_{cash_mode}{feature_suffix}_seed{seed}.png"
+    metrics_path = f"{results_dir}/metrics_{algo}_{cash_mode}{feature_suffix}_v{ENV_CONFIG_VERSION}_wf_seed{seed}.json"
+    model_path = f"{results_dir}/wf_{algo}_{cash_mode}{feature_suffix}_model_v{ENV_CONFIG_VERSION}_{period_name}_seed{seed}"
+    chart_path = f"{results_dir}/walk_forward_{algo}_{cash_mode}{feature_suffix}_v{ENV_CONFIG_VERSION}_seed{seed}.png"
     return {
         "metrics": metrics_path,
         "model": model_path,

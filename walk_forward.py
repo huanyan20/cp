@@ -168,6 +168,7 @@ def run_candidate_set(
     temporal_extractor: bool = False,
     candidate_pairs: list[tuple[str, bool]] | None = None,
     sl_scores_dir: str | None = None,
+    npz_path: str | None = None,
 ):
     """O3: train only the curated candidate set (SAC enabled + PPO disabled).
 

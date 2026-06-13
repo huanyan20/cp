@@ -57,12 +57,6 @@ def run_eval(
         overnight_feature_path=overnight_feature_path,
     )
 
-    # 針對舊模型：移除新增的 open_return 相關特徵
-    for t, df in enriched.items():
-        cols_to_drop = [c for c in df.columns if c.endswith("open_return")]
-        if cols_to_drop:
-            enriched[t] = df.drop(columns=cols_to_drop)
-
     model_name_lower = model_path.lower()
     if enable_cash_action_override is not None:
         enable_cash_action = enable_cash_action_override
