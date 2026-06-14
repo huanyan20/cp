@@ -172,7 +172,8 @@ def compute_reward_kernel(
         turnover_p = lambda_turnover * (0.054 + 0.54 * (last_turnover - 0.3))
         
     cash_p = lambda_cash * cash_ratio
-    drawdown_p = lambda_drawdown * max(0.0, raw_dd - reward_ref_dd)
+    dd_excess = max(0.0, raw_dd - reward_ref_dd)
+    drawdown_p = lambda_drawdown * (dd_excess ** 2)
     whipsaw_p = lambda_whipsaw * whipsaw_penalty
 
     regime_penalty = 0.0
@@ -196,4 +197,4 @@ def compute_reward_kernel(
         - whipsaw_p
         + cash_defensive_bonus
     )
-    return max(-10.0, min(10.0, raw))
+    return max(-30.0, min(30.0, raw))

@@ -18,11 +18,11 @@ except Exception:  # pragma: no cover
 LAMBDA_COST = 5.0
 LAMBDA_TURNOVER = 1.0
 LAMBDA_CASH = 0.0
-LAMBDA_DRAWDOWN = 1.2
-LAMBDA_CASH_DEFENSIVE = 0.35
-REWARD_REF_DD = 0.02
-REGIME_DD_THRESHOLD = 0.06
-REGIME_PENALTY_COEF = 1.5
+LAMBDA_DRAWDOWN = 20.0         # R6.2: Quadratic penalty scaling (was 4.0 linear)
+LAMBDA_CASH_DEFENSIVE = 0.80   # R6.1: Increased from 0.35 to 0.80
+REWARD_REF_DD = 0.03           # R6.2: Relaxed from 0.02 to 0.03 to tolerate small noise
+REGIME_DD_THRESHOLD = 0.05     # R6.1: Lowered from 0.06 to 0.05
+REGIME_PENALTY_COEF = 2.0      # R6.1: Increased from 1.5 to 2.0
 LAMBDA_WHIPSAW = 0.05
 
 class RewardCalculator:
