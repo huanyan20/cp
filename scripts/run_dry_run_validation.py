@@ -118,6 +118,7 @@ def main():
                 "risk_check_passed": passed,
                 "generated_buys": len(buys),
                 "generated_sells": len(sells),
+                "macro_guard_level": signal_data.get("metadata", {}).get("macro_guard_level", "OK"),
             }
             
             history = []

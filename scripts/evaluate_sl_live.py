@@ -159,12 +159,13 @@ def main():
     # Read macro guard
     market_context = None
     guard_path = SETTINGS.live.macro_guard_path
+    guard_level = "OK"
     if guard_path.exists():
         try:
             guard_status = json.loads(guard_path.read_text(encoding="utf-8"))
-            level = guard_status.get("level", "OK")
-            market_context = MarketContext(macro_guard_level=level)
-            logger.info(f"Loaded macro guard level: {level}")
+            guard_level = guard_status.get("level", "OK")
+            market_context = MarketContext(macro_guard_level=guard_level)
+            logger.info(f"Loaded macro guard level: {guard_level}")
         except Exception as e:
             logger.warning(f"Failed to read macro guard: {e}")
 
@@ -191,7 +192,8 @@ def main():
             "top_features": list(summary.feature_importance_top10.keys())[:5],
             "scores": today_scores,
             "vols": vols,
-            "hysteresis_held": list(current_positions.keys())
+            "hysteresis_held": list(current_positions.keys()),
+            "macro_guard_level": guard_level
         }
     }
 
