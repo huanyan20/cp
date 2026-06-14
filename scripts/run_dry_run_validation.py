@@ -5,6 +5,7 @@ import logging
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # Ensure project root is in sys.path
@@ -99,6 +100,38 @@ def main():
         sells = diff.get("sell_orders", [])
         buys = diff.get("buy_orders", [])
         logger.info(f"Generated Orders: {len(sells)} Sells, {len(buys)} Buys")
+        
+        # Append to Daily Dry-run Report
+        report_path = Path("results_dir/daily_dry_run_report.json")
+        try:
+            signal_data = json.loads(Path(signal_path).read_text(encoding="utf-8"))
+            signal_id = signal_data.get("signal_id", "unknown")
+            weights = signal_data.get("target_weights", {})
+            top_holdings = {k: round(v, 4) for k, v in sorted(weights.items(), key=lambda x: x[1], reverse=True)[:5]}
+            
+            report = {
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "signal_id": signal_id,
+                "top_holdings": top_holdings,
+                "total_exposure": round(risk.get("observed_total_exposure", 0.0), 4),
+                "max_single_weight": round(risk.get("observed_max_single_weight", 0.0), 4),
+                "risk_check_passed": passed,
+                "generated_buys": len(buys),
+                "generated_sells": len(sells),
+            }
+            
+            history = []
+            if report_path.exists():
+                try:
+                    history = json.loads(report_path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    pass
+            history.append(report)
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text(json.dumps(history, indent=4, ensure_ascii=False), encoding="utf-8")
+            logger.info(f"Daily dry-run report appended to {report_path}")
+        except Exception as e:
+            logger.warning(f"Failed to append daily dry-run report: {e}")
         
         if passed:
             logger.info("\nSUCCESS: Dry-run validation passed. The model signal is safe for execution.")
