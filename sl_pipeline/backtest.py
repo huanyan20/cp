@@ -12,7 +12,7 @@ import pandas as pd
 from metrics_utils import calculate_metrics
 from research_pipeline import write_metrics_json
 from settings import load_settings
-from sl_pipeline.allocator import MarketContext, PortfolioAllocator, PortfolioState
+from sl_pipeline.allocator import MarketContext, PortfolioAllocator, PortfolioState, TargetPortfolio
 from trading_env import COMMISSION_RATE, SLIPPAGE_RATE, TAX_RATE_SELL, SLIPPAGE_MULTIPLIER
 
 if TYPE_CHECKING:
@@ -27,6 +27,7 @@ class BacktestConfig:
     min_vol_obs: int = 5
     vol_floor: float = 0.05
     initial_value: float = 1.0
+    liquidity_stress: bool = False
 
 
 def rolling_annualized_vol(log_returns: pd.Series, window: int, min_obs: int, vol_floor: float) -> float:
@@ -162,6 +163,40 @@ def simulate_period(
     cash_hist: list[float] = []
     turnover_hist: list[float] = []
 
+    macro_eval = {}
+    macro_path = Path("capital_flow_analysis/data/overnight_gap_features_1d.csv")
+    if market_context is None and macro_path.exists():
+        try:
+            df_macro = pd.read_csv(macro_path)
+            if "tw_trade_date" in df_macro.columns:
+                df_macro["tw_trade_date"] = pd.to_datetime(df_macro["tw_trade_date"])
+                df_macro.set_index("tw_trade_date", inplace=True)
+                
+                features = pd.DataFrame(index=df_macro.index)
+                if "sox_ret" in df_macro.columns: features["sox_ret"] = df_macro["sox_ret"]
+                if "vix_ret" in df_macro.columns: features["vix_ret"] = df_macro["vix_ret"]
+                if "BTC_ret" in df_macro.columns: features["btc_ret"] = df_macro["BTC_ret"]
+                if "USD_JPY_ret" in df_macro.columns: features["jpy_strength"] = -df_macro["USD_JPY_ret"]
+                
+                for col in features.columns:
+                    roll = features[col].rolling(window=120, min_periods=20)
+                    std = roll.std(ddof=1).replace(0.0, np.nan)
+                    features[col + "_z"] = (features[col] - roll.mean()) / std
+                
+                for dt, row in features.iterrows():
+                    level = "OK"
+                    if pd.notna(row.get("sox_ret_z")) and row["sox_ret_z"] <= -3.0: level = "CRITICAL"
+                    elif pd.notna(row.get("vix_ret_z")) and row["vix_ret_z"] >= 3.0: level = "CRITICAL"
+                    elif pd.notna(row.get("btc_ret_z")) and row["btc_ret_z"] <= -3.0: level = "CRITICAL"
+                    elif pd.notna(row.get("jpy_strength_z")) and row["jpy_strength_z"] >= 3.0: level = "CRITICAL"
+                    elif pd.notna(row.get("sox_ret_z")) and row["sox_ret_z"] <= -2.0: level = "WARN"
+                    elif pd.notna(row.get("vix_ret_z")) and row["vix_ret_z"] >= 2.0: level = "WARN"
+                    elif pd.notna(row.get("btc_ret_z")) and row["btc_ret_z"] <= -2.0: level = "WARN"
+                    elif pd.notna(row.get("jpy_strength_z")) and row["jpy_strength_z"] >= 2.0: level = "WARN"
+                    macro_eval[pd.Timestamp(dt).date()] = level
+        except Exception as e:
+            print(f"Failed to load macro guard features: {e}")
+
     for i in range(len(dates) - 1):
         signal_date = dates[i]
         return_date = dates[i + 1]
@@ -192,24 +227,23 @@ def simulate_period(
         )
 
         daily_market_context = market_context
-        if daily_market_context is None and len(enriched) > 0:
-            first_ticker = next(iter(enriched.keys()))
-            df = enriched[first_ticker]
-            col = "macro_^TWII_log_return"
-            if col in df.columns:
-                try:
-                    past = df.loc[:signal_date, col].dropna().tail(60)
-                    if len(past) >= 20:
-                        mom = float(np.sum(past))
-                        print(f"[{signal_date.date()}] TWII 60d mom: {mom:.4f}")
-                        if mom < -0.02:
-                            daily_market_context = MarketContext(macro_guard_level="CRITICAL")
-                        elif mom < 0.01:
-                            daily_market_context = MarketContext(macro_guard_level="WARN")
-                except KeyError:
-                    pass
+        if daily_market_context is None:
+            sig_date_obj = signal_date.date()
+            if sig_date_obj in macro_eval:
+                daily_market_context = MarketContext(macro_guard_level=macro_eval[sig_date_obj])
 
-        target = allocator.allocate(score_row, vols, state, daily_market_context)
+        # Trade Guard Circuit Breaker
+        daily_loss = 0.0
+        if len(portfolio_hist) >= 2:
+            prev_day_pv = portfolio_hist[-2]
+            daily_loss = (prev_day_pv - portfolio_value) / max(prev_day_pv, 1e-12)
+
+        if daily_loss > 0.05 or rolling_mdd > 0.15:
+            # Block the trade and maintain current positions
+            print(f"[{signal_date.date()}] Circuit breaker tripped! MDD: {rolling_mdd:.2%}, Daily Loss: {daily_loss:.2%}")
+            target = TargetPortfolio(target_weights=dict(positions), cash_weight=max(0.0, 1.0 - sum(positions.values())))
+        else:
+            target = allocator.allocate(score_row, vols, state, daily_market_context)
 
         open_returns = {}
         log_returns = {}
@@ -221,6 +255,16 @@ def simulate_period(
             else:
                 open_returns[ticker] = 0.0
                 log_returns[ticker] = 0.0
+
+        if cfg.liquidity_stress:
+            prev_total = sum(positions.values())
+            target_total = sum(target.target_weights.values())
+            # If allocator is dumping > 30% of portfolio at once (panic sell)
+            if prev_total - target_total > 0.30:
+                for t in positions:
+                    if target.target_weights.get(t, 0.0) < positions[t]:
+                        open_returns[t] = -0.098  # Force limit down gap
+                        log_returns[t] = -0.098
 
         # Apply overnight drift to PV and weights
         daily_open_rets = {t: np.exp(open_returns[t]) - 1.0 for t in tickers}

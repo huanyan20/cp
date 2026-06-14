@@ -46,5 +46,5 @@ Only proceed to CMoney automation when the current candidate is gate-approved an
 
 - SAC cash-enabled models can look safe because they stop trading; this is not production risk control.
 - Drawdown must be judged by worst case, not only mean MDD.
-- Weak periods must be inspected directly, especially 2024H2 and 2025H1.
+- Weak periods must be inspected directly, especially 2024H2, 2025H1, and 2025H2.
 - Archive plans before 2026-06-14 are historical and do not authorize live deployment.

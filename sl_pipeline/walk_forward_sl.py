@@ -20,6 +20,7 @@ from sl_pipeline.backtest import (
     metrics_from_backtest,
     simulate_period,
     sl_metrics_path,
+    BacktestConfig,
 )
 from sl_pipeline.gate import run_sl_promotion_gate, save_sl_gate_result
 from sl_pipeline.allocator import PortfolioState
@@ -220,6 +221,7 @@ def run_walk_forward_sl(
     all_cash_weights: list[float] = []
     all_turnover: list[float] = []
     current_state: PortfolioState | None = None
+    period_cache = []
 
     for planned in plan:
         name = planned["name"]
@@ -267,6 +269,13 @@ def run_walk_forward_sl(
             generator.save_scores(scores, scores_path)
 
         combined_test = {**train_data, **test_data}
+        period_cache.append({
+            "combined_test": combined_test,
+            "scores": scores,
+            "period_tickers": period_tickers,
+            "test_start": period["test_start"],
+            "test_end": test_end,
+        })
         backtest = simulate_period(
             combined_test,
             scores,
@@ -316,6 +325,53 @@ def run_walk_forward_sl(
         out_results, horizon=horizon, seed=seed, allocator=allocator_name
     )
     write_metrics_json(seed_metrics, str(path))
+
+    # --- LIQUIDITY STRESS TEST ---
+    stress_state: PortfolioState | None = None
+    stress_returns = []
+    for p_data in period_cache:
+        stress_bt = simulate_period(
+            p_data["combined_test"],
+            p_data["scores"],
+            allocator,
+            p_data["period_tickers"],
+            test_start=p_data["test_start"],
+            test_end=p_data["test_end"],
+            initial_state=stress_state,
+            config=BacktestConfig(liquidity_stress=True)
+        )
+        stress_state = PortfolioState(
+            positions=stress_bt["final_positions"],
+            cash_weight=stress_bt["final_cash_weight"],
+            portfolio_value=stress_bt["final_portfolio_value"],
+            peak_value=stress_bt["final_peak_value"],
+        )
+        stress_returns.extend(stress_bt["daily_returns"])
+        
+    stress_cum = np.cumprod(1.0 + np.array(stress_returns))
+    stress_hist = [1.0] + list(stress_cum)
+    stress_mdd = 0.0
+    if len(stress_hist) > 0:
+        peak = stress_hist[0]
+        for v in stress_hist:
+            if v > peak:
+                peak = v
+            dd = (peak - v) / peak
+            if dd > stress_mdd:
+                stress_mdd = dd
+                
+    stress_summary = {
+        "tests": {
+            "limit_down_lock": {
+                "total_return": stress_hist[-1] - 1.0,
+                "max_drawdown": stress_mdd
+            }
+        }
+    }
+    stress_path = out_results / "stress_summary.json"
+    stress_path.parent.mkdir(parents=True, exist_ok=True)
+    stress_path.write_text(json.dumps(stress_summary, indent=2), encoding="utf-8")
+    # -----------------------------
 
     if output_dir:
         output_dir.mkdir(parents=True, exist_ok=True)

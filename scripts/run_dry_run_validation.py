@@ -42,6 +42,7 @@ def main():
         sys.executable,
         "scripts/evaluate_sl_live.py",
         "--horizon", "10",
+        "--top-k", str(SETTINGS.research.default_topk),
         "--output", str(signal_path),
         "--aid", str(aid)
     ]

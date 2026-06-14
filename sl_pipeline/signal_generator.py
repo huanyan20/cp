@@ -81,6 +81,7 @@ class SignalGenerator:
         X = self._prepare_features(train_panel, fit_median=True)
         y = train_panel[label].astype(float)
         params = dict(self.config.lgbm_params)
+        print(f"DEBUG: y.min() = {y.min()}, y.max() = {y.max()}")
         self.model = lgb.LGBMRegressor(**params)
         self.model.fit(X, y)
 

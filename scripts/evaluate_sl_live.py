@@ -34,10 +34,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("EvaluateSLLive")
 SETTINGS = load_settings()
 
-def get_current_positions(aid: str | None) -> dict[str, float]:
-    """Fetch current positions from CMoney to provide state for hysteresis."""
+def get_current_positions_and_mdd(aid: str | None) -> tuple[dict[str, float], float]:
+    """Fetch current positions from CMoney and calculate live MDD."""
     if not HAS_RPA or not aid:
-        return {}
+        return {}, 0.0
     try:
         rpa = CMoneyRPA(aid=aid)
         status = rpa.get_account_status()
@@ -45,8 +45,22 @@ def get_current_positions(aid: str | None) -> dict[str, float]:
         
         inventory = status.get("inventory", {})
         total_assets = status.get("total_assets", 0.0)
+        
+        mdd = 0.0
+        if total_assets > 0:
+            equity_file = Path("capital_flow_analysis/data/live_equity_curve.json")
+            history = {}
+            if equity_file.exists():
+                try:
+                    history = json.loads(equity_file.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    pass
+            peak_equity = max(list(history.values()) + [total_assets]) if history else total_assets
+            if peak_equity > 0:
+                mdd = (peak_equity - total_assets) / peak_equity
+
         if total_assets <= 0:
-            return {}
+            return {}, 0.0
             
         positions = {}
         for ticker, qty in inventory.items():
@@ -57,10 +71,10 @@ def get_current_positions(aid: str | None) -> dict[str, float]:
             # We'll assign a nominal weight to signify it's held.
             if qty > 0:
                 positions[ticker] = 0.05  # Nominal weight to trigger hysteresis
-        return positions
+        return positions, mdd
     except Exception as e:
-        logger.warning(f"Could not fetch current positions for hysteresis: {e}")
-        return {}
+        logger.warning(f"Could not fetch current positions or MDD: {e}")
+        return {}, 0.0
 
 def main():
     parser = argparse.ArgumentParser(description="Live Signal Generator for SL LightGBM h10")
@@ -146,14 +160,15 @@ def main():
         vol_floor=0.05,
     )
 
-    # Get current positions for hysteresis
-    current_positions = get_current_positions(args.aid)
+    # Get current positions for hysteresis and calculate MDD
+    current_positions, current_mdd = get_current_positions_and_mdd(args.aid)
+    logger.info(f"Current live MDD calculated as: {current_mdd*100:.2f}%")
     state = PortfolioState(
         positions=current_positions,
         cash_weight=max(0.0, 1.0 - sum(current_positions.values())),
         portfolio_value=1.0,
         peak_value=1.0,
-        rolling_mdd=0.0  # MDD cap handled by trade_guard circuit breaker live
+        rolling_mdd=current_mdd
     )
 
     # Read macro guard
@@ -193,6 +208,7 @@ def main():
             "scores": today_scores,
             "vols": vols,
             "hysteresis_held": list(current_positions.keys()),
+            "rolling_mdd": current_mdd,
             "macro_guard_level": guard_level
         }
     }

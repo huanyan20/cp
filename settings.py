@@ -81,7 +81,7 @@ class ResearchSettings(BaseSettings):
     )
     promotion_min_seeds: int = Field(3, validation_alias="PROMOTION_MIN_SEEDS")
     promotion_sortino_threshold: float = Field(0.8, validation_alias="PROMOTION_SORTINO_THRESHOLD")
-    promotion_max_drawdown: float = Field(0.35, validation_alias="PROMOTION_MAX_DRAWDOWN")
+    promotion_max_drawdown: float = Field(0.30, validation_alias="PROMOTION_MAX_DRAWDOWN")
     promotion_turnover_limit: float = Field(0.10, validation_alias="PROMOTION_TURNOVER_LIMIT")
 
     @property

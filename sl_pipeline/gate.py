@@ -166,6 +166,7 @@ def run_sl_promotion_gate(
     sortino_threshold: float | None = None,
     max_drawdown_limit: float | None = None,
     turnover_limit: float | None = None,
+    baseline_summary: dict[str, Any] | None = None,
 ) -> tuple[PromotionResult, list[dict], pd.DataFrame]:
     """Run promotion gate on SL metrics (no RL baseline/ablation/stress gates)."""
     sortino_threshold = (
@@ -211,14 +212,34 @@ def run_sl_promotion_gate(
     else:
         records = read_sl_metric_files(results_dir or SETTINGS.paths.results_dir)
 
+    if baseline_summary is None:
+        try:
+            baseline_path = Path(results_dir or SETTINGS.paths.results_dir) / "baseline_summary.json"
+            if baseline_path.exists():
+                with open(baseline_path, encoding="utf-8") as f:
+                    baseline_summary = json.load(f)
+        except Exception as e:
+            print(f"[WARN] Could not load baseline_summary: {e}")
+
+    try:
+        stress_path = Path(results_dir or SETTINGS.paths.results_dir) / "stress_summary.json"
+        if stress_path.exists():
+            with open(stress_path, encoding="utf-8") as f:
+                stress_summary = json.load(f)
+        else:
+            stress_summary = None
+    except Exception as e:
+        print(f"[WARN] Could not load stress_summary: {e}")
+        stress_summary = None
+
     raw_summary = build_sl_raw_summary(records)
     period_df = build_sl_period_dataframe(records)
     result = run_promotion_gate(
         raw_summary=raw_summary,
         period_df=period_df if not period_df.empty else None,
-        baseline_summary=None,
+        baseline_summary=baseline_summary,
         ablation_summary=None,
-        stress_summary=None,
+        stress_summary=stress_summary,
         min_seeds=min_seeds,
         sortino_threshold=sortino_threshold,
         max_drawdown_limit=max_drawdown_limit,
