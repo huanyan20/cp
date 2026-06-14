@@ -5,7 +5,6 @@ import logging
 import os
 import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 
 # Ensure project root is in sys.path
@@ -103,6 +102,7 @@ def main():
         
         # Append to Daily Dry-run Report
         report_path = Path("results_dir/daily_dry_run_report.json")
+        from datetime import datetime
         try:
             signal_data = json.loads(Path(signal_path).read_text(encoding="utf-8"))
             signal_id = signal_data.get("signal_id", "unknown")
