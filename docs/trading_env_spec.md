@@ -1,3 +1,5 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # TaiwanStockEnv Specification
 
 Updated: 2026-06-10 (P7 NumPy internals + SL feature inputs documented)

@@ -1,17 +1,19 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # Cross-Review: P8 IndexedReplayBuffer — Reviewed by Cursor
 
-> **Note**（2026-06-11）：§「後續建議」中 R7/R7b 已随 v3 **取消**。P8 保留為基礎設施。  
-> **Reviewer**: Cursor IDE Agent  
-> **Scope**: `main`（P8 merged + post-merge fixes）  
-> **Handoff**: [`.research/handoffs/P8.json`](../handoffs/P8.json)（Antigravity @ `fe831c4`）  
-> **Review date**: 2026-06-11（re-review）  
+> **Note**（2026-06-11）：§「後續建議」中 R7/R7b 已随 v3 **取消**。P8 保留為基礎設施。
+> **Reviewer**: Cursor IDE Agent
+> **Scope**: `main`（P8 merged + post-merge fixes）
+> **Handoff**: `.research/handoffs/P8.json` (`../handoffs/P8.json`)（Antigravity @ `fe831c4`）
+> **Review date**: 2026-06-11（re-review）
 > **Verdict**: `pass`
 
 ---
 
 ## 1. Summary
 
-P8 以 `IndexedReplayBuffer` 取代 SB3 預設 buffer：只存 `(t, account_block, action, reward, done)`，抽樣時由 `env._market_data` / `_sl_data` 重建完整 obs。  
+P8 以 `IndexedReplayBuffer` 取代 SB3 預設 buffer：只存 `(t, account_block, action, reward, done)`，抽樣時由 `env._market_data` / `_sl_data` 重建完整 obs。
 **main 現況**已含 merge 後修正（buffer_size RAM 公式、float16、`estimated_bytes_per_transition`、向量化 `_reconstruct_obs`）。
 
 本輪重審：**173/173 pytest 全過**（含 5 項 buffer 測試），回覆 handoff open question「完整 suite 副作用」。
@@ -117,7 +119,7 @@ tests/test_indexed_replay_buffer.py — 5/5 passed
 pass
 ```
 
-**Blockers**: 無  
+**Blockers**: 無
 **建議後續**（可選）：SL features 與 multi-env 各加 1 測；sample 端 profiling（plan §1.1 待做）。
 
 ---

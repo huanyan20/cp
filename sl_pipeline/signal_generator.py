@@ -19,6 +19,7 @@ from sl_pipeline.labels import (
 )
 
 DEFAULT_LGBM_PARAMS: dict[str, Any] = {
+    "objective": "huber",
     "n_estimators": 120,
     "learning_rate": 0.05,
     "max_depth": 4,
@@ -58,24 +59,14 @@ class SignalGenerator:
         self.feature_cols = self.config.feature_cols or default_feature_columns()
         self.model: lgb.LGBMRegressor | None = None
         self.train_median_: pd.Series | None = None
-        self.ticker_encoder_: dict[str, int] | None = None
+
 
     @property
     def label_col(self) -> str:
         return label_column_name(self.config.horizon)
 
     def _prepare_features(self, panel: pd.DataFrame, *, fit_median: bool = False) -> pd.DataFrame:
-        if fit_median:
-            self.ticker_encoder_ = {ticker: idx for idx, ticker in enumerate(sorted(panel["ticker"].unique()))}
-            
         X = panel[self.feature_cols].copy().astype(float)
-        
-        # Inject categorical ticker feature
-        if self.ticker_encoder_ is None:
-            raise RuntimeError("Call fit() before predict().")
-            
-        ticker_col = panel["ticker"].map(self.ticker_encoder_).fillna(-1).astype(int)
-        X["ticker_idx"] = ticker_col
         
         if fit_median:
             self.train_median_ = X.median()
@@ -91,7 +82,7 @@ class SignalGenerator:
         y = train_panel[label].astype(float)
         params = dict(self.config.lgbm_params)
         self.model = lgb.LGBMRegressor(**params)
-        self.model.fit(X, y, categorical_feature=["ticker_idx"])
+        self.model.fit(X, y)
 
     def predict(self, panel: pd.DataFrame) -> pd.Series:
         if self.model is None:
@@ -153,7 +144,7 @@ class SignalGenerator:
     def _top_feature_importance(self, top_n: int) -> dict[str, float]:
         if self.model is None:
             return {}
-        cols = self.feature_cols + ["ticker_idx"]
+        cols = self.feature_cols
         pairs = sorted(
             zip(cols, self.model.feature_importances_, strict=True),
             key=lambda item: item[1],

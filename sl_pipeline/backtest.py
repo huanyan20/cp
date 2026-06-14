@@ -137,6 +137,7 @@ def simulate_period(
     test_end: str,
     config: BacktestConfig | None = None,
     market_context: MarketContext | None = None,
+    initial_state: PortfolioState | None = None,
 ) -> dict:
     """Run OOS backtest: signal at t, trade before earning return on t+1."""
     cfg = config or BacktestConfig()
@@ -144,10 +145,16 @@ def simulate_period(
     if len(dates) < 2:
         raise ValueError("Backtest calendar has fewer than 2 OOS days.")
 
-    portfolio_value = cfg.initial_value
-    peak_value = portfolio_value
-    positions: dict[str, float] = {}
-    cash_weight = 1.0
+    if initial_state:
+        portfolio_value = initial_state.portfolio_value
+        peak_value = initial_state.peak_value
+        positions = dict(initial_state.positions)
+        cash_weight = initial_state.cash_weight
+    else:
+        portfolio_value = cfg.initial_value
+        peak_value = portfolio_value
+        positions: dict[str, float] = {}
+        cash_weight = 1.0
 
     portfolio_hist = [portfolio_value]
     daily_returns: list[float] = []
@@ -183,7 +190,26 @@ def simulate_period(
             peak_value=peak_value,
             rolling_mdd=float(rolling_mdd),
         )
-        target = allocator.allocate(score_row, vols, state, market_context)
+
+        daily_market_context = market_context
+        if daily_market_context is None and len(enriched) > 0:
+            first_ticker = next(iter(enriched.keys()))
+            df = enriched[first_ticker]
+            col = "macro_^TWII_log_return"
+            if col in df.columns:
+                try:
+                    past = df.loc[:signal_date, col].dropna().tail(60)
+                    if len(past) >= 20:
+                        mom = float(np.sum(past))
+                        print(f"[{signal_date.date()}] TWII 60d mom: {mom:.4f}")
+                        if mom < -0.02:
+                            daily_market_context = MarketContext(macro_guard_level="CRITICAL")
+                        elif mom < 0.01:
+                            daily_market_context = MarketContext(macro_guard_level="WARN")
+                except KeyError:
+                    pass
+
+        target = allocator.allocate(score_row, vols, state, daily_market_context)
 
         open_returns = {}
         log_returns = {}
@@ -248,6 +274,10 @@ def simulate_period(
         "n_days": len(daily_returns),
         "test_start": test_start,
         "test_end": test_end,
+        "final_positions": positions,
+        "final_cash_weight": cash_weight,
+        "final_portfolio_value": portfolio_value,
+        "final_peak_value": peak_value,
     }
 
 

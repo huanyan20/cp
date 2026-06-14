@@ -1,9 +1,11 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # 模型算法評估：強化學習投資組合策略
 
-> **v3 行動**（2026-06-11）：依本文件 §二/§四 執行 **r5 RL 重構**（M1 obs/reward → M2 分層 WF）。詳見 [`RESEARCH_STRATEGY_V3.md`](RESEARCH_STRATEGY_V3.md)。  
+> **v3 行動**（2026-06-11）：依本文件 §二/§四 執行 **r5 RL 重構**（M1 obs/reward → M2 分層 WF）。詳見 `RESEARCH_STRATEGY_V3.md` (`RESEARCH_STRATEGY_V3.md`)。
 > **狀態**：研究評估（2026-06-09）
 > **範圍**：`trading_env.py`、`gnn_extractor.py`、`train_portfolio.py`、`research_pipeline.py`
-> **對應計畫**：[`../專案總覽.md`](../專案總覽.md)
+> **對應計畫**：`../專案總覽.md` (`../專案總覽.md`)
 
 ---
 

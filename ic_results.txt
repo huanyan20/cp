@@ -1,0 +1,5 @@
+Period 2022_BEAR: Avg Rank IC = 0.0395, Top features: ['ATR_norm', 'corr_peer2_20d', 'MACDs_norm']
+Period 2024H2: Avg Rank IC = 0.0837, Top features: ['ATR_norm', 'mom_60d', 'corr_peer2_20d']
+Period 2025H1: Avg Rank IC = 0.0590, Top features: ['ATR_norm', 'mom_60d', 'corr_peer2_20d']
+Period 2025H2: Avg Rank IC = -0.0943, Top features: ['ATR_norm', 'mom_60d', 'ADX_norm']
+Period 2026H1: Avg Rank IC = nan, Top features: ['ATR_norm', 'mom_60d', 'MACDs_norm']

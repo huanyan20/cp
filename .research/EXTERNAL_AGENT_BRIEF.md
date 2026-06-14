@@ -1,67 +1,30 @@
-# External Agent Brief — v3 再審核（round 2）
+# External Agent Brief
 
-> **Repo**：`C:\Users\ggini\Desktop\cp`（主 repo）  
-> **任務**：審核 v3 計畫 + **精簡後目錄結構** + 程式一致性
+> Strategy snapshot: 2026-06-14
+> Task for any external agent: review or implement within the SL-first strategy.
 
----
+## Current Direction
 
-## 1. 必讀（僅 4 個）
+The project has moved away from SAC-heavy promotion planning. Supervised learning is the main production-candidate path. SAC is retained only for low-cost smoke tests and targeted ablations.
 
-1. [`reviews/V3-STRATEGY-REVIEW-BRIEF.md`](reviews/V3-STRATEGY-REVIEW-BRIEF.md)
-2. [`docs/RESEARCH_STRATEGY_V3.md`](../docs/RESEARCH_STRATEGY_V3.md)
-3. [`research_state.json`](research_state.json)
-4. [`.research/README.md`](README.md) — 精簡索引
+## What To Prioritize
 
-上一輪：[`reviews/V3-reviewed-by-codex.md`](reviews/V3-reviewed-by-codex.md)（含 remediation）
+1. SL h10 is now **APPROVED** and has cleared all 5 critical gates (MDD < 35%, Turnover < 10%, Return +134%).
+2. The current production path is: `SL signal -> rule allocator -> trade_guard dry-run -> CMoney RPA`.
+3. trade_guard compatibility for eventual live dry-run is the next active priority.
+4. Keep monitoring rule allocator risk behavior for live forward-testing.
 
----
+## What Not To Do By Default
 
-## 2. 精簡後布局（應為真）
+- Do not revive SAC-R, R7/R8/R9, or SAC buffer plans as active work.
+- Do not run full SAC multi-seed promotion matrices unless smoke checks justify it.
+- Do not treat a single high-return SAC seed as deployable.
 
-```text
-docs/
-  RESEARCH_STRATEGY_V3.md     ← 唯一活躍路線圖
-  SAC_BUFFER_PLAN.md          ← 短 stub（指向 archive）
-  archive/SAC_BUFFER_PLAN_v2.md
-
-.research/
-  research_state.json
-  experiment_ledger.jsonl
-  baselines/
-  reviews/
-    V3-STRATEGY-REVIEW-BRIEF.md
-    V3-reviewed-by-codex.md
-  archive/                    ← P8/P10/SAC-R handoffs & 舊 reviews
-  README.md
-```
-
-**不應**在 `.research/handoffs/` 或 `.research/reviews/` 根目錄看到 `P8.json`、`P10.json`、`SAC-R-PLAN-REVIEW-BRIEF.md`。
-
----
-
-## 3. 程式檢查
+## Useful Checks
 
 ```powershell
-cd C:\Users\ggini\Desktop\cp
-Test-Path scripts\sac_gradient_ablation.py          # False
-rg "SAC_GRADIENT_STEPS|SAC_BATCH_SIZE" train_portfolio.py  # 無匹配
-.\env\Scripts\python.exe -m pytest tests/test_indexed_replay_buffer.py -q
+.\env\Scripts\python.exe -m sl_pipeline.walk_forward_sl --allocator rule --gate --seed 42
+.\env\Scripts\python.exe experiment_report.py
 ```
 
----
-
-## 4. 輸出
-
-`reviews/V3-reviewed-by-<agent>-r2.md`
-
-Verdict：`pass` | `pass_with_nits` | `needs_changes` | `block`
-
----
-
-## 5. Prompt
-
-```text
-Review CP v3 strategy round 2 per .research/reviews/V3-STRATEGY-REVIEW-BRIEF.md.
-Verify archive layout and no stale active-plan docs.
-Write reviews/V3-reviewed-by-<agent>-r2.md.
-```
+All archive material is historical unless updated after 2026-06-14.

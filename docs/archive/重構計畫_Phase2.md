@@ -1,7 +1,10 @@
+> Horizon update: 2026-06-14 latest SL walk-forward retires h5 from the production path. h10 is the active SL repair target.
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # Phase 2 計畫：研究營運效率與維護成本優化
 
-> **封存文件** · 狀態以 [`../../專案總覽.md`](../../專案總覽.md) 為準  
-> **前提**：P0–P6 已完成（見 [`重構計畫_P0-P6.md`](重構計畫_P0-P6.md)）  
+> **封存文件** · 狀態以 `../../專案總覽.md` (`../../專案總覽.md`) 為準
+> **前提**：P0–P6 已完成（見 `重構計畫_P0-P6.md` (`重構計畫_P0-P6.md`)）
 > **動機**：訓練耗時大（完整矩陣 ≈ 18M timesteps）、reward 變更後難以比較、markdown 分散
 
 ---
@@ -195,7 +198,7 @@ experiment_report.md     → 自動產出
 
 ### SL — 監督式學習混合架構（方案 B，設計拍板）
 
-**文件**：`docs/SUPERVISED_LEARNING_PLAN.md` · **打勾總表**：[`專案總覽.md`](專案總覽.md) §4.4
+**文件**：`docs/SUPERVISED_LEARNING_PLAN.md` · **打勾總表**：`專案總覽.md` (`專案總覽.md`) §4.4
 
 **摘要**：`SignalGenerator`（LightGBM 5d 截面超額）+ `PortfolioAllocator` 抽象；第一版 `RuleBasedAllocator`（Top-5、反波動、18% vol-target、10%/15% 階梯 MDD、換手遲滯），預留 `RLAllocator`。與 RL 共用 walk-forward / Gate，**不動 live path**。
 

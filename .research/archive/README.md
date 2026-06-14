@@ -1,6 +1,8 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # 研究封存（非活躍）
 
-> **勿當排程來源**。活躍計畫：[`docs/RESEARCH_STRATEGY_V3.md`](../../docs/RESEARCH_STRATEGY_V3.md)
+> **勿當排程來源**。活躍計畫：`docs/RESEARCH_STRATEGY_V3.md` (`../../docs/RESEARCH_STRATEGY_V3.md`)
 
 ## 內容
 
@@ -13,10 +15,10 @@
 | `reviews/P10-reviewed-by-external.md` | P10 cross-review | 歷史 |
 | `reviews/SAC-R-PLAN-REVIEW-BRIEF.md` | SAC-R 審核 brief | superseded by v3 |
 | `decisions/sac-r-spike.md` | R-S0 決策 | SAC-R frozen |
-| [`logs/`](logs/README.md) | WF 終端日誌 | 本地 gitignored |
+| `logs/` (`logs/README.md`) | WF 終端日誌 | 本地 gitignored |
 
 ## 文件封存
 
 | 路徑 | 說明 |
 |------|------|
-| [`docs/archive/SAC_BUFFER_PLAN_v2.md`](../../docs/archive/SAC_BUFFER_PLAN_v2.md) | v2 雙線排程 + P8 完整規格 |
+| `docs/archive/SAC_BUFFER_PLAN_v2.md` (`../../docs/archive/SAC_BUFFER_PLAN_v2.md`) | v2 雙線排程 + P8 完整規格 |

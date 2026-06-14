@@ -22,6 +22,7 @@ from sl_pipeline.backtest import (
     sl_metrics_path,
 )
 from sl_pipeline.gate import run_sl_promotion_gate, save_sl_gate_result
+from sl_pipeline.allocator import PortfolioState
 from sl_pipeline.rule_based_allocator import (
     RuleBasedAllocator,
     RuleBasedAllocatorConfig,
@@ -218,6 +219,7 @@ def run_walk_forward_sl(
     all_positions: list[list[float]] = []
     all_cash_weights: list[float] = []
     all_turnover: list[float] = []
+    current_state: PortfolioState | None = None
 
     for planned in plan:
         name = planned["name"]
@@ -272,6 +274,13 @@ def run_walk_forward_sl(
             period_tickers,
             test_start=period["test_start"],
             test_end=test_end,
+            initial_state=current_state,
+        )
+        current_state = PortfolioState(
+            positions=backtest["final_positions"],
+            cash_weight=backtest["final_cash_weight"],
+            portfolio_value=backtest["final_portfolio_value"],
+            peak_value=backtest["final_peak_value"],
         )
         period_metrics = metrics_from_backtest(
             backtest,

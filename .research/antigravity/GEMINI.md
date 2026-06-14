@@ -1,3 +1,5 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> Retained for review/history only; current implementation priority is SL-first, SAC research-only.
 # Antigravity-specific rules (v3 review — main repo)
 
 - **Project root**: open main `C:\Users\ggini\Desktop\cp` (not legacy `cp-p8-buffer` worktree)

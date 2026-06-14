@@ -18,17 +18,17 @@ from sl_pipeline.allocator import (
 class RuleBasedAllocatorConfig:
     top_k: int = 5
     hysteresis_rank: int = 10
-    weight_band: float = 0.05
-    enable_vol_target: bool = False
-    target_vol_annual: float = 0.18
+    weight_band: float = 0.06
+    enable_vol_target: bool = True
+    target_vol_annual: float = 0.15
     vol_floor: float = 0.05
     weighting_method: str = "inv_vol"  # 'inv_vol' or 'equal'
-    yellow_mdd: float = 0.10
+    yellow_mdd: float = 0.20
     yellow_max_exposure: float = 0.50
-    red_mdd: float = 0.15
-    red_max_exposure: float = 0.10
+    red_mdd: float = 0.35
+    red_max_exposure: float = 0.0
     max_single_weight: float = 0.35
-    min_score: float = -np.inf
+    min_score: float = 1e-4
 
 
 class RuleBasedAllocator(PortfolioAllocator):
@@ -62,7 +62,7 @@ class RuleBasedAllocator(PortfolioAllocator):
                 selected.add(ticker)
 
         selected_sorted = sorted(
-            selected,
+            [t for t in selected if scores.get(t, -np.inf) > cfg.min_score],
             key=lambda ticker: scores.get(ticker, -np.inf),
             reverse=True,
         )
@@ -95,6 +95,9 @@ class RuleBasedAllocator(PortfolioAllocator):
             
         exposure = self._apply_mdd_cap(exposure, state.rolling_mdd, cfg)
         exposure = self._apply_macro_cap(exposure, market_context)
+
+        if exposure <= 1e-4:
+            return TargetPortfolio(target_weights={}, cash_weight=1.0)
 
         stock_weights = {ticker: weight * exposure for ticker, weight in raw_weights.items()}
         stock_weights = self._cap_single_names(stock_weights, cfg.max_single_weight)

@@ -1,6 +1,10 @@
-# 研究決策紀錄
+# Decisions Index
 
-| 檔案 | 用途 |
-|------|------|
-| [`decision_algorithm_review.md`](decision_algorithm_review.md) | v3.3 action decode 修訂依據（Antigravity 2026-06-11） |
-| [`../archive/decisions/sac-r-spike.md`](../archive/decisions/sac-r-spike.md) | SAC-R 封存決策（歷史） |
+> Strategy snapshot: 2026-06-14
+
+| Decision | Status |
+|---|---|
+| [decision_algorithm_review.md](decision_algorithm_review.md) | Active: SL-first, SAC research-only. |
+| [../archive/decisions/sac-r-spike.md](../archive/decisions/sac-r-spike.md) | Historical: superseded by SL-first strategy. |
+
+Older decision records are retained for context and should not be treated as active queues unless explicitly updated after 2026-06-14.

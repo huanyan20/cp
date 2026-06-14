@@ -1,7 +1,9 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # CP 台股科技股 RL Trading Guide
 
-> 文件版本：v10.1  
-> 更新日期：2026-06-07  
+> 文件版本：v10.1
+> 更新日期：2026-06-07
 > 適用範圍：45 檔科技台股投資組合、PPO/SAC、動態現金避險、Capital Flow 輔助特徵、CMoney RPA
 
 ## 1. 專案定位

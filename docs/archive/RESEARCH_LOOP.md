@@ -1,8 +1,10 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # CP 研究迴圈（Research Loop）— v3 RL Rebuild
 
-> **狀態**：v3.1（2026-06-11）· **phase**=`rl_rebuild_v3`  
-> **活躍計畫**：[`RESEARCH_STRATEGY_V3.md`](RESEARCH_STRATEGY_V3.md)  
-> **相關**：[`RESEARCH_PLAYBOOK.md`](RESEARCH_PLAYBOOK.md) · [`.research/research_state.json`](../.research/research_state.json)
+> **狀態**：v3.1（2026-06-11）· **phase**=`rl_rebuild_v3`
+> **活躍計畫**：`RESEARCH_STRATEGY_V3.md` (`RESEARCH_STRATEGY_V3.md`)
+> **相關**：`RESEARCH_PLAYBOOK.md` (`RESEARCH_PLAYBOOK.md`) · `.research/research_state.json` (`../.research/research_state.json`)
 
 ---
 
@@ -51,8 +53,8 @@ P8/P10 implement **已完成**。外部 agent 現任務：
 
 | 任務 | 文件 |
 |------|------|
-| v3 戰略 + 文件一致性審核 | [`.research/reviews/V3-STRATEGY-REVIEW-BRIEF.md`](../.research/reviews/V3-STRATEGY-REVIEW-BRIEF.md) |
-| 外部 agent 設定 | [`.research/EXTERNAL_AGENT_BRIEF.md`](../.research/EXTERNAL_AGENT_BRIEF.md) |
+| v3 戰略 + 文件一致性審核 | `.research/reviews/V3-STRATEGY-REVIEW-BRIEF.md` (`../.research/reviews/V3-STRATEGY-REVIEW-BRIEF.md`) |
+| 外部 agent 設定 | `.research/EXTERNAL_AGENT_BRIEF.md` (`../.research/EXTERNAL_AGENT_BRIEF.md`) |
 
 輸出：`.research/reviews/V3-reviewed-by-<agent>.md`
 

@@ -1,16 +1,18 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # Decision: SAC-R R-S0 Recurrent Spike
 
-> **Line status**（2026-06-11）：SAC-R **frozen** — handoff 保留，不進 v3 active queue。  
-> **Date**: 2026-06-11  
-> **Phase**: R-S0  
-> **Worktree**: `../cp-sac-r` · branch `feat/sac-r-recurrent`  
-> **Artifact**: [`results_dir/sac_r_spike.json`](../../results_dir/sac_r_spike.json)
+> **Line status**（2026-06-11）：SAC-R **frozen** — handoff 保留，不進 v3 active queue。
+> **Date**: 2026-06-11
+> **Phase**: R-S0
+> **Worktree**: `../cp-sac-r` · branch `feat/sac-r-recurrent`
+> **Artifact**: `results_dir/sac_r_spike.json` (`../../results_dir/sac_r_spike.json`)
 
 ---
 
 ## 1. 目的
 
-驗證 Recurrent（LSTM）路線在 Windows + CUDA 上可跑通，並量測相對 Line A 參考实现的 fps 差距。  
+驗證 Recurrent（LSTM）路線在 Windows + CUDA 上可跑通，並量測相對 Line A 參考实现的 fps 差距。
 **不**以 R6 metrics 為判準。
 
 ---

@@ -1,8 +1,10 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # Macro Universe Separation
 
-> 文件版本：v1.1  
-> 更新日期：2026-06-07  
-> **狀態**：✅ 已落地（見 [`專案總覽.md`](專案總覽.md) §4.6）  
+> 文件版本：v1.1
+> 更新日期：2026-06-07
+> **狀態**：✅ 已落地（見 `專案總覽.md` (`專案總覽.md`) §4.6）
 > 目的：保持 RL baseline 可比較，同時允許 `capital_flow_analysis` 使用較大的全球資金流 universe。
 
 ## 1. 背景

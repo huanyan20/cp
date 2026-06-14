@@ -1,7 +1,10 @@
+> Horizon update: 2026-06-14 latest SL walk-forward retires h5 from the production path. h10 is the active SL repair target.
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # 整體決策算法合理性評估（完整版）
 
-> **評估日期**：2026-06-11 · **評估者**：Antigravity  
-> **評估基準**：v3 戰略（r5 RL rebuild）· 硬體限制已知（GTX 1060，~36–52 fps；Windows RAM）  
+> **評估日期**：2026-06-11 · **評估者**：Antigravity
+> **評估基準**：v3 戰略（r5 RL rebuild）· 硬體限制已知（GTX 1060，~36–52 fps；Windows RAM）
 > **評估範圍**：MDP → 特徵提取器 → Action 解碼 → Reward → 訓練超參 → 驗證體系 → 戰略決策
 
 ---
@@ -413,5 +416,5 @@ $env:SAC_BUFFER_RAM_GB="1.5"
 
 ---
 
-*評估依據：`trading_env.py`、`gnn_extractor.py`、`train_portfolio.py`、`docs/ALGORITHM_REVIEW.md`、`docs/RESEARCH_STRATEGY_V3.md`、`docs/SUPERVISED_LEARNING_PLAN.md`、`.research/baselines/*.json`（seed 42/43/44）*  
+*評估依據：`trading_env.py`、`gnn_extractor.py`、`train_portfolio.py`、`docs/ALGORITHM_REVIEW.md`、`docs/RESEARCH_STRATEGY_V3.md`、`docs/SUPERVISED_LEARNING_PLAN.md`、`.research/baselines/*.json`（seed 42/43/44）*
 *更新：2026-06-11 · Antigravity*

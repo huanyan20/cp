@@ -1,3 +1,6 @@
+> Horizon update: 2026-06-14 latest SL walk-forward retires h5 from the production path. h10 is the active SL repair target.
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # 訓練計畫 v4（2026-06-11 重新規劃）
 
 > **[更新 2026-06-11 23:55] 本計畫已完結。**
@@ -5,9 +8,9 @@
 > RL 研發路徑正式暫停，系統全速轉向 SL 實盤（Live Ops）部署。
 > 請參閱 `專案總覽.md` 與 `docs/LIVE_OPS.md` 獲取後續實盤準備資訊。
 
-> **前提**：基於系統性全局評估（`docs/RISK_REGISTER.md`）與現行程式碼（r5.1）重新規劃。  
-> **硬體**：GTX 1060 3GB VRAM、RAM 有限（SAC buffer 上限 1.5GB）、Windows 單進程。  
-> **目前狀態**：Promotion Gate BLOCKED（RL worst MDD 44.41%；SL 38.55% 舊跑 / 33.14% 最新）  
+> **前提**：基於系統性全局評估（`docs/RISK_REGISTER.md`）與現行程式碼（r5.1）重新規劃。
+> **硬體**：GTX 1060 3GB VRAM、RAM 有限（SAC buffer 上限 1.5GB）、Windows 單進程。
+> **目前狀態**：Promotion Gate BLOCKED（RL worst MDD 44.41%；SL 38.55% 舊跑 / 33.14% 最新）
 > **核心問題已解決**：`walk_forward.py` 每期結束後未釋放記憶體（OOM at period 3），已加入 `del + gc.collect()`。
 
 ---
@@ -23,7 +26,7 @@
 | S5 短測（5K 步）| 第 1、2 期正常，第 3 期 OOM | task-510 log | OOM 已修 |
 | Obs 維度（含 SL）| 45 × 2132 = 95,940 | 計算確認 | ✅ |
 
-**關鍵發現**：obs_dim_per_stock = 20 × 106 + 9 + 3 = **2132**（106 = 24 base + 7 cross + 75 macro）。  
+**關鍵發現**：obs_dim_per_stock = 20 × 106 + 9 + 3 = **2132**（106 = 24 base + 7 cross + 75 macro）。
 每個 period 訓練結束後，PyTorch model 和 numpy market_data 未釋放，是 OOM 根本原因。
 
 ---

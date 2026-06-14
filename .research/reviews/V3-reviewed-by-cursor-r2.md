@@ -1,6 +1,8 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> Retained for review/history only; current implementation priority is SL-first, SAC research-only.
 # V3 Strategy Review — Round 2
 
-**Agent**: Cursor  
+**Agent**: Cursor
 **Date**: 2026-06-11
 
 ## Verdict

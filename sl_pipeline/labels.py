@@ -52,8 +52,7 @@ def build_cross_demean_frame(
     }
     raw_df = pd.DataFrame(raw)
     median = raw_df.median(axis=1, skipna=True)
-    adjusted_median = median.clip(lower=0.0)
-    return raw_df.sub(adjusted_median, axis=0)
+    return raw_df.sub(median, axis=0).clip(lower=0.0)
 
 
 def build_labeled_panel(

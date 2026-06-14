@@ -1,3 +1,5 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> Retained for review/history only; current implementation priority is SL-first, SAC research-only.
 # V3 Strategy Review - Round 2
 
 **Agent**: Antigravity
@@ -14,9 +16,9 @@ m1_recommendation: GO
 
 ## Verification Details
 
-1. **v3 戰略對準**: 
+1. **v3 戰略對準**:
    - `docs/RESEARCH_STRATEGY_V3.md` and `.research/research_state.json` accurately reflect the M1 -> M2 queue with the North Star being worst-case MDD ≤ 35%.
-2. **目錄精簡**: 
+2. **目錄精簡**:
    - Active and `archive/` separation is well-defined. `.research/README.md` serves as a concise and effective entry point.
    - Verified that `.research/handoffs/` and `.research/reviews/` do not contain stale active-plan docs (`P8.json`, `P10.json`, `SAC-R-PLAN-REVIEW-BRIEF.md`). They have been properly archived.
    - `docs/SAC_BUFFER_PLAN.md` is correctly minimized to a 10-line stub pointing to the active strategy and archive.

@@ -1,3 +1,5 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> Retained for review/history only; current implementation priority is SL-first, SAC research-only.
 # R6 凍結基線（env r4）
 
 > **勿與 r5.1 直接比較**。hash=`1bbfe5c2` · `env_config_version=r4`

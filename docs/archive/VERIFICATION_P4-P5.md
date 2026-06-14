@@ -1,9 +1,11 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # P4/P5 重構計畫 驗證完成報告
 
-> **封存**：P4/P5 已完成。全局狀態見 [`專案總覽.md`](專案總覽.md)。
+> **封存**：P4/P5 已完成。全局狀態見 `專案總覽.md` (`專案總覽.md`)。
 
-**驗證日期**: 2026-06-07  
-**驗證對象**: P4 train/eval 拆分 + P5 promotion gate  
+**驗證日期**: 2026-06-07
+**驗證對象**: P4 train/eval 拆分 + P5 promotion gate
 **驗證結果**: ✅ **全部通過**
 
 ---
@@ -193,6 +195,6 @@
 
 ---
 
-**驗證者**: GitHub Copilot  
-**驗證完成時間**: 2026-06-07 14:00  
+**驗證者**: GitHub Copilot
+**驗證完成時間**: 2026-06-07 14:00
 **建議**: 可以安全地將 P4 與 P5 部署至生產環境

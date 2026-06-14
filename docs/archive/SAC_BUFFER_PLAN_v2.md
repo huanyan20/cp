@@ -1,15 +1,17 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # SAC 基礎設施與研究線計畫（v2 · 已封存）
 
-> **狀態**：**已封存**（2026-06-11）— 活躍路線圖改為 [`../RESEARCH_STRATEGY_V3.md`](../RESEARCH_STRATEGY_V3.md)  
+> **狀態**：**已封存**（2026-06-11）— 活躍路線圖改為 `../RESEARCH_STRATEGY_V3.md` (`../RESEARCH_STRATEGY_V3.md`)
 > **保留用途**：P8 IndexedReplayBuffer 實作規格與歷史決策紀錄；**不再**作為排程或研究 queue 來源
 > **範圍**：`indexed_replay_buffer.py`、`train_portfolio.py`、`trading_env.py`、未來 `sac_r/`
-> **對應**：[`專案總覽.md`](../專案總覽.md) · [`RESEARCH_LOOP.md`](RESEARCH_LOOP.md) · [`ALGORITHM_REVIEW.md`](ALGORITHM_REVIEW.md)
+> **對應**：`專案總覽.md` (`../專案總覽.md`) · `RESEARCH_LOOP.md` (`RESEARCH_LOOP.md`) · `ALGORITHM_REVIEW.md` (`ALGORITHM_REVIEW.md`)
 
 ---
 
 ## 0. 戰略轉向（2026-06-11）
 
-**舊模式**：P8→R7 重訓 → 與 R6 metrics 比 ΔMDD → 決定 R8/R9。  
+**舊模式**：P8→R7 重訓 → 與 R6 metrics 比 ΔMDD → 決定 R8/R9。
 **新模式**：先把 **效率、驗證、維護** 做對；算法實驗各自有基線，**不綁 R6 Gate**。
 
 | 項目 | 舊 | 新 |
@@ -86,7 +88,7 @@
 
 SAC off-policy 優勢曾被 ~2,805 transition buffer 壓成準 on-policy。**P8 已從結構上解決**（300K @ ~0.2GB RAM）。
 
-R6 worst MDD 44.41% 是 **歷史觀測**，不是「IndexedReplayBuffer 無效」的判准。  
+R6 worst MDD 44.41% 是 **歷史觀測**，不是「IndexedReplayBuffer 無效」的判准。
 Line A 後續實驗以 **sac_classic 基線** 為 Δ，不以 R6 為 hard gate。
 
 ---
@@ -173,7 +175,7 @@ git worktree add ..\cp-sac-r -b feat/sac-r-recurrent
 
 ## 6. 執行排程（v2 · 已廢止）
 
-> **取代**：[`RESEARCH_STRATEGY_V3.md`](RESEARCH_STRATEGY_V3.md) — M1/M2 queue。  
+> **取代**：`RESEARCH_STRATEGY_V3.md` (`RESEARCH_STRATEGY_V3.md`) — M1/M2 queue。
 > 以下排程 **勿執行**：R7b 已刪、R7/R8/R9 已砍、SAC-R 已 frozen。
 
 | 優先 | ID | v3 處置 |
@@ -187,7 +189,7 @@ git worktree add ..\cp-sac-r -b feat/sac-r-recurrent
 
 ## 7. P10 摘要（不變，見原 §4）
 
-PPO VecEnv ablation 已完成；**不 merge 預設**（A1 fps 1.20×、|ΔMDD| 14pp）。  
+PPO VecEnv ablation 已完成；**不 merge 預設**（A1 fps 1.20×、|ΔMDD| 14pp）。
 腳本留 `cp-p10-ppo` worktree 供日後硬體升級重測。
 
 ---

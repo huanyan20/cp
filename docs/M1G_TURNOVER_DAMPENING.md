@@ -1,3 +1,5 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # Turnover Dampening & Reward Enhancement Walkthrough
 
 本次更新成功地將「懲罰過大」的問題根除，讓模型的 Reward 曲線（梯度）重新恢復生機。以下是本次完成的主要機制與成果：

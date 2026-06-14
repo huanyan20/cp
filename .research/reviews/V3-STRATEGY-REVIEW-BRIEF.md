@@ -1,8 +1,10 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> Retained for review/history only; current implementation priority is SL-first, SAC research-only.
 # v3 戰略審核 Brief — round 2（精簡後）
 
-> **Audience**：審核 agent  
-> **Date**：2026-06-11  
-> **Repo**：`C:\Users\ggini\Desktop\cp` · `main`  
+> **Audience**：審核 agent
+> **Date**：2026-06-11
+> **Repo**：`C:\Users\ggini\Desktop\cp` · `main`
 > **Round 1**：[`V3-reviewed-by-codex.md`](V3-reviewed-by-codex.md)（block → remediated）
 
 ---

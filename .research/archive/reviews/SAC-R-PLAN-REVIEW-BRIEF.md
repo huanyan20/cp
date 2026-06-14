@@ -1,10 +1,12 @@
+> Superseded by 2026-06-14 SL-first strategy.
+> This document is retained as historical context only. It must not be treated as an active implementation queue unless explicitly updated after 2026-06-14.
 # SAC-R Plan Review Brief — R-S0 / R-S1 / R-S2
 
-> **SUPERSEDED**（2026-06-11）：SAC-R 研究線已 **frozen**。活躍審核改為 [`V3-STRATEGY-REVIEW-BRIEF.md`](V3-STRATEGY-REVIEW-BRIEF.md)。本文件僅作歷史參考。
+> **SUPERSEDED**（2026-06-11）：SAC-R 研究線已 **frozen**。活躍審核改為 `V3-STRATEGY-REVIEW-BRIEF.md` (`V3-STRATEGY-REVIEW-BRIEF.md`)。本文件僅作歷史參考。
 
-> **Audience**: Review agent（完整計劃審核）  
-> **Handoff**: [`.research/handoffs/SAC-R.json`](../handoffs/SAC-R.json)  
-> **Date**: 2026-06-11  
+> **Audience**: Review agent（完整計劃審核）
+> **Handoff**: `.research/handoffs/SAC-R.json` (`../handoffs/SAC-R.json`)
+> **Date**: 2026-06-11
 > **Worktree**: `C:\Users\ggini\Desktop\cp-sac-r` · branch `feat/sac-r-recurrent`
 
 ---
