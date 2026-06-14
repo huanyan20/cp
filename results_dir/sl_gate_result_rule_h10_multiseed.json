@@ -1,0 +1,23 @@
+{
+  "all_passed": true,
+  "results": {
+    "42": {
+      "can_promote": true,
+      "summary": "\u2713 Model cleared all 5 critical gates. Promoted to live trading eligible. (5/5 total gates passed)",
+      "overall_sortino": 1.3588390305712896,
+      "overall_mdd": 0.32454768941761286
+    },
+    "43": {
+      "can_promote": true,
+      "summary": "\u2713 Model cleared all 5 critical gates. Promoted to live trading eligible. (5/5 total gates passed)",
+      "overall_sortino": 1.27414618750044,
+      "overall_mdd": 0.33415183319161545
+    },
+    "44": {
+      "can_promote": true,
+      "summary": "\u2713 Model cleared all 5 critical gates. Promoted to live trading eligible. (5/5 total gates passed)",
+      "overall_sortino": 1.2066479259312162,
+      "overall_mdd": 0.3450687212877923
+    }
+  }
+}

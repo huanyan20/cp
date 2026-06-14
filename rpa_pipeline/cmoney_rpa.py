@@ -105,6 +105,14 @@ class CMoneyRPA:
         print("[RPA] (Requests) 正在獲取大富翁總資產與庫存 (透過 ASHX API)...")
         aid = self._get_aid()
 
+        if aid == "dummy_aid":
+            print("[RPA] 使用 dummy_aid，回傳模擬資金與庫存。")
+            return {
+                "total_assets": 1000000.0,
+                "available_cash": 1000000.0,
+                "inventory": {},
+            }
+
         # 1. 取得總資產
         info_url = (
             f"https://www.cmoney.tw/vt/ashx/accountdata.ashx?act=AccountInfo&aid={aid}"

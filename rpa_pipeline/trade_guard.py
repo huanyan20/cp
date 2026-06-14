@@ -8,6 +8,11 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import sys
+
+# Ensure project root is in sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from rpa_pipeline.cmoney_rpa import CMoneyRPA
 from rpa_pipeline.rebalance_planner import build_dry_run_diff
 from settings import load_settings
@@ -73,7 +78,7 @@ def evaluate_risk_limits(signal: dict) -> dict:
     }
 
 
-def check_pnl_circuit_breaker(total_assets: float) -> dict:
+def check_pnl_circuit_breaker(total_assets: float, write_equity: bool = True) -> dict:
     """Checks the live equity curve for severe daily loss or overall drawdown."""
     equity_file = Path("capital_flow_analysis/data/live_equity_curve.json")
     equity_file.parent.mkdir(parents=True, exist_ok=True)
@@ -95,8 +100,9 @@ def check_pnl_circuit_breaker(total_assets: float) -> dict:
     mdd = (peak_equity - total_assets) / peak_equity if peak_equity > 0 else 0
 
     # Save today's equity
-    history[today_str] = total_assets
-    equity_file.write_text(json.dumps(history, indent=4), encoding="utf-8")
+    if write_equity:
+        history[today_str] = total_assets
+        equity_file.write_text(json.dumps(history, indent=4), encoding="utf-8")
 
     reasons = []
     # Thresholds: 5% daily loss, 15% Max Drawdown
@@ -114,7 +120,7 @@ def check_pnl_circuit_breaker(total_assets: float) -> dict:
 
 
 
-def generate_diff(signal_path: str, aid: str, output_path: str | None = None) -> Path:
+def generate_diff(signal_path: str, aid: str, output_path: str | None = None, write_equity: bool = True) -> Path:
     signal = load_signal(signal_path, aid, ttl_seconds=SETTINGS.live.signal_ttl_seconds)
     rpa = CMoneyRPA(aid=aid)
     try:
@@ -125,7 +131,7 @@ def generate_diff(signal_path: str, aid: str, output_path: str | None = None) ->
         diff = build_dry_run_diff(signal, inventory)
         risk_checks = evaluate_risk_limits(signal)
         
-        cb_result = check_pnl_circuit_breaker(total_assets)
+        cb_result = check_pnl_circuit_breaker(total_assets, write_equity=write_equity)
         if not cb_result["passed"]:
             risk_checks["passed"] = False
             risk_checks["reasons"].extend(cb_result["reasons"])
@@ -145,10 +151,11 @@ def main():
     parser.add_argument("--signal", required=True, help="Path to signal.json")
     parser.add_argument("--aid", default=None, help="CMoney aid; defaults to CMONEY_AID")
     parser.add_argument("--output", default=None, help="Optional diff output path")
+    parser.add_argument("--no-write-equity", action="store_true", help="Do not update live_equity_curve.json (useful for isolated dry-runs)")
     args = parser.parse_args()
 
     aid = _resolve_aid(args.aid)
-    output = generate_diff(args.signal, aid, args.output)
+    output = generate_diff(args.signal, aid, args.output, write_equity=not args.no_write_equity)
     print(output)
 
 

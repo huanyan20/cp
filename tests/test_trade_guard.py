@@ -127,6 +127,32 @@ class TradeGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "max single weight"):
             trade_guard.generate_diff(str(signal_path), "2249294", str(self.tmp_path / "diff.json"))
 
+    def test_trade_guard_no_write_equity_leaves_live_equity_curve_untouched(self):
+        trade_guard.CMoneyRPA = lambda aid: AccountStatusOnlyRPA()
+        signal_path = self.write_json(
+            "signal.json",
+            self.signal(target_weights={"2330": 0.2}, target_lots={"2330": 2}),
+        )
+        old_cwd = os.getcwd()
+
+        try:
+            os.chdir(self.tmp_path)
+            diff_path = self.tmp_path / "diff.json"
+            written = trade_guard.generate_diff(
+                str(signal_path),
+                "2249294",
+                str(diff_path),
+                write_equity=False,
+            )
+
+            self.assertEqual(written, diff_path)
+            self.assertTrue(diff_path.exists())
+            self.assertFalse(
+                Path("capital_flow_analysis/data/live_equity_curve.json").exists()
+            )
+        finally:
+            os.chdir(old_cwd)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,22 @@
+{
+    "signal_id": "sl-h10-20260614",
+    "aid": "dummy_aid",
+    "created_at": "2026-06-14T14:47:55.304687Z",
+    "current_lots": {},
+    "target_lots": {},
+    "plan": {
+        "buys": {},
+        "sells": {}
+    },
+    "net_buy_lots": 0,
+    "net_sell_lots": 0,
+    "risk_checks": {
+        "checked": true,
+        "passed": true,
+        "reasons": [],
+        "max_single_weight": 0.35,
+        "max_total_exposure": 1.0,
+        "observed_max_single_weight": 0.0263392584139054,
+        "observed_total_exposure": 0.1893126956220926
+    }
+}
