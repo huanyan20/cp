@@ -333,10 +333,17 @@ def simulate_period(
         if daily_market_context is None:
             level = "OK"
             market_trends = build_trends_as_of(enriched, ["^TWII", "^IXIC"], signal_date, trend_window=60)
+            market_trends_fast = build_trends_as_of(enriched, ["^TWII", "^IXIC"], signal_date, trend_window=20)
             twii_down = market_trends.get("^TWII", 1.0) < 0.0
             ixic_down = market_trends.get("^IXIC", 1.0) < 0.0
+            twii_down_fast = market_trends_fast.get("^TWII", 1.0) < -0.05
+            ixic_down_fast = market_trends_fast.get("^IXIC", 1.0) < -0.05
+            
             if twii_down and ixic_down:
                 level = "CRITICAL"
+            elif (twii_down_fast and ixic_down_fast):
+                # Faster trigger if market drops >5% in 20 days
+                level = "WARN"
             elif twii_down or ixic_down:
                 level = "WARN"
 

@@ -19,7 +19,7 @@ from data_loader import fetch_multi_asset_data
 from data_pipeline.universe_builder import get_universe_builder
 from settings import load_settings
 from sl_pipeline.allocator import MarketContext, PortfolioState
-from sl_pipeline.backtest import build_vols_as_of
+from sl_pipeline.backtest import build_vols_as_of, build_trends_as_of
 from sl_pipeline.rule_based_allocator import RuleBasedAllocator, RuleBasedAllocatorConfig
 from sl_pipeline.signal_generator import SignalGenerator, SignalGeneratorConfig
 from stock_universe import MACRO_TICKERS_RL
@@ -204,6 +204,26 @@ def main():
             logger.info(f"Loaded macro guard level: {guard_level}")
         except Exception as e:
             logger.warning(f"Failed to read macro guard: {e}")
+            
+    if market_context is None or market_context.macro_guard_level == "OK":
+        market_trends_60 = build_trends_as_of(data, ["^TWII", "^IXIC"], pd.Timestamp(today_str), trend_window=60)
+        market_trends_20 = build_trends_as_of(data, ["^TWII", "^IXIC"], pd.Timestamp(today_str), trend_window=20)
+        twii_down = market_trends_60.get("^TWII", 1.0) < 0.0
+        ixic_down = market_trends_60.get("^IXIC", 1.0) < 0.0
+        twii_down_fast = market_trends_20.get("^TWII", 1.0) < -0.05
+        ixic_down_fast = market_trends_20.get("^IXIC", 1.0) < -0.05
+        
+        level = "OK"
+        if twii_down and ixic_down:
+            level = "CRITICAL"
+        elif (twii_down_fast and ixic_down_fast):
+            level = "WARN"
+        elif twii_down or ixic_down:
+            level = "WARN"
+            
+        if level != "OK":
+            market_context = MarketContext(macro_guard_level=level)
+            logger.info(f"Overriding macro guard level to: {level} due to moving average trends")
 
     allocator = RuleBasedAllocator(RuleBasedAllocatorConfig(
         top_k=args.top_k,
@@ -227,6 +247,38 @@ def main():
                     lots = int(target_amt / (latest_close * 1000))
                     target_lots[ticker] = lots
 
+    import hashlib
+    
+    # Load promotion gate info
+    gate_status = "unknown"
+    metrics_source = None
+    gate_file = SETTINGS.paths.results_dir / f"sl_gate_result_rule_h{args.horizon}_multiseed.json"
+    if gate_file.exists():
+        try:
+            gate_data = json.loads(gate_file.read_text(encoding="utf-8"))
+            prom_gate = gate_data.get("promotion_gate", {})
+            metrics_source = gate_file.name
+            if prom_gate.get("full_gate_approved"):
+                gate_status = "full"
+            elif prom_gate.get("core_gate_approved"):
+                gate_status = "core"
+            else:
+                # Add blocked reasons if available
+                blocked_reasons = [g["name"] for g in prom_gate.get("gates", []) if not g.get("passed", True)]
+                gate_status = f"blocked: {', '.join(blocked_reasons)}" if blocked_reasons else "blocked"
+        except Exception as e:
+            logger.warning(f"Failed to read gate status from {gate_file}: {e}")
+
+    # Build config and hash
+    strategy_config = {
+        "horizon": args.horizon,
+        "top_k": args.top_k,
+        "target_vol": SETTINGS.research.sl_target_vol,
+        "trailing_stop": SETTINGS.research.sl_trailing_stop,
+        "max_single_weight": SETTINGS.risk_limits.max_single_weight
+    }
+    config_hash = hashlib.sha256(json.dumps(strategy_config, sort_keys=True).encode("utf-8")).hexdigest()[:8]
+
     signal = {
         "signal_id": signal_id,
         "created_at": datetime.utcnow().isoformat() + "Z",
@@ -235,6 +287,10 @@ def main():
         "target_weights": weights,
         "target_lots": target_lots,
         "metadata": {
+            "strategy_config": strategy_config,
+            "config_hash": config_hash,
+            "gate_status": gate_status,
+            "metrics_source": metrics_source,
             "horizon": args.horizon,
             "train_start": start_date_str,
             "train_end": yesterday_str,

@@ -127,6 +127,17 @@ class TradeGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "max single weight"):
             trade_guard.generate_diff(str(signal_path), "2249294", str(self.tmp_path / "diff.json"))
 
+    def test_trade_guard_blocks_empty_lots_with_nonempty_weights(self):
+        trade_guard.CMoneyRPA = lambda aid: AccountStatusOnlyRPA()
+        # Non-empty target_weights but empty target_lots
+        signal_path = self.write_json(
+            "signal.json",
+            self.signal(target_weights={"2330": 0.2}, target_lots={}),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "fail-closed: target_weights is non-empty but target_lots is empty or missing"):
+            trade_guard.generate_diff(str(signal_path), "2249294", str(self.tmp_path / "diff.json"))
+
     def test_trade_guard_no_write_equity_leaves_live_equity_curve_untouched(self):
         trade_guard.CMoneyRPA = lambda aid: AccountStatusOnlyRPA()
         signal_path = self.write_json(

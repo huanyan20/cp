@@ -97,19 +97,50 @@ def main():
         logger.info(f"Circuit Breaker MDD: {risk.get('mdd', 0.0)*100:.2f}%")
         logger.info(f"Circuit Breaker Daily Loss: {risk.get('daily_loss', 0.0)*100:.2f}%")
         
-        sells = diff.get("sell_orders", [])
-        buys = diff.get("buy_orders", [])
+        plan = diff.get("plan", {"buys": {}, "sells": {}})
+        sells = plan.get("sells", {})
+        buys = plan.get("buys", {})
         logger.info(f"Generated Orders: {len(sells)} Sells, {len(buys)} Buys")
         
         # Append to Daily Dry-run Report
         report_path = Path("results_dir/daily_dry_run_report.json")
         from datetime import datetime
         try:
+            import yfinance as yf
+            def get_price(ticker):
+                # Simple helper to fetch latest price for value estimation
+                try:
+                    hist = yf.Ticker(f"{ticker}.TW" if not ticker.endswith(".TW") else ticker).history(period="5d")
+                    if not hist.empty and "Close" in hist:
+                        return float(hist["Close"].dropna().iloc[-1])
+                except Exception:
+                    pass
+                return 0.0
+
             signal_data = json.loads(Path(signal_path).read_text(encoding="utf-8"))
             signal_id = signal_data.get("signal_id", "unknown")
             weights = signal_data.get("target_weights", {})
             top_holdings = {k: round(v, 4) for k, v in sorted(weights.items(), key=lambda x: x[1], reverse=True)[:5]}
             
+            target_lots = signal_data.get("target_lots", {})
+            nonzero_target_lots_count = sum(1 for qty in target_lots.values() if qty > 0)
+            max_single_lot = max(target_lots.values(), default=0) if target_lots else 0
+
+            estimated_trade_value = sum(qty * get_price(t) * 1000 for t, qty in buys.items()) + \
+                                    sum(qty * get_price(t) * 1000 for t, qty in sells.items())
+            
+            max_single_value = max((qty * get_price(t) * 1000 for t, qty in target_lots.items() if qty > 0), default=0.0)
+
+            latest_stress_mdd = 0.0
+            stress_path = Path("results_dir/stress_summary.json")
+            if stress_path.exists():
+                try:
+                    stress_data = json.loads(stress_path.read_text(encoding="utf-8"))
+                    tests = stress_data.get("tests", {})
+                    latest_stress_mdd = max((t_data.get("max_drawdown", 0.0) for t_data in tests.values()), default=0.0)
+                except Exception:
+                    pass
+
             report = {
                 "date": datetime.now().strftime("%Y-%m-%d"),
                 "signal_id": signal_id,
@@ -120,6 +151,11 @@ def main():
                 "generated_buys": len(buys),
                 "generated_sells": len(sells),
                 "macro_guard_level": signal_data.get("metadata", {}).get("macro_guard_level", "OK"),
+                "nonzero_target_lots_count": nonzero_target_lots_count,
+                "max_single_lot": max_single_lot,
+                "max_single_value": round(max_single_value, 2),
+                "estimated_trade_value": round(estimated_trade_value, 2),
+                "latest_stress_mdd": round(latest_stress_mdd, 4)
             }
             
             history = []

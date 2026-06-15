@@ -45,6 +45,8 @@ def _load_inventory_rows(rpa: CMoneyRPA) -> list[dict]:
 
 def evaluate_risk_limits(signal: dict) -> dict:
     target_weights = signal.get("target_weights") or {}
+    target_lots = signal.get("target_lots") or {}
+    
     if not target_weights:
         return {
             "checked": False,
@@ -58,6 +60,10 @@ def evaluate_risk_limits(signal: dict) -> dict:
     max_single = max(single_exposure.values(), default=0.0)
     total_exposure = sum(single_exposure.values())
     reasons = []
+    
+    if target_weights and not target_lots:
+        reasons.append("fail-closed: target_weights is non-empty but target_lots is empty or missing")
+
     if max_single > SETTINGS.risk_limits.max_single_weight:
         reasons.append(
             f"max single weight {max_single:.4f} exceeds {SETTINGS.risk_limits.max_single_weight:.4f}"
