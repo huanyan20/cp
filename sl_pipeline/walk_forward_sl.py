@@ -24,6 +24,7 @@ from sl_pipeline.backtest import (
 )
 from sl_pipeline.gate import run_sl_promotion_gate, save_sl_gate_result
 from sl_pipeline.allocator import PortfolioState
+from sl_pipeline.candidate import current_candidate_metadata
 from sl_pipeline.rule_based_allocator import (
     RuleBasedAllocator,
     RuleBasedAllocatorConfig,
@@ -57,10 +58,14 @@ def build_allocator(name: str) -> RuleBasedAllocator:
         raise ValueError(
             f"Unsupported allocator {name!r}; only 'rule' is implemented in S2."
         )
+    default_config = RuleBasedAllocatorConfig()
     return RuleBasedAllocator(
         RuleBasedAllocatorConfig(
             top_k=SETTINGS.research.default_topk,
-            max_single_weight=SETTINGS.risk_limits.max_single_weight,
+            max_single_weight=min(
+                SETTINGS.risk_limits.max_single_weight,
+                default_config.max_single_weight,
+            ),
             target_vol_annual=SETTINGS.research.sl_target_vol,
             trailing_stop_threshold=SETTINGS.research.sl_trailing_stop,
         )
@@ -175,6 +180,7 @@ def run_single_period(
                 seed=seed,
                 allocator=allocator_name,
                 settings=SETTINGS,
+                allocator_config=allocator.config,
             )
             seed_metrics["periods"][period_name] = period_metrics
             seed_metrics["overall"] = period_metrics
@@ -216,6 +222,13 @@ def run_walk_forward_sl(
         seed=seed,
         allocator=allocator_name,
         settings=SETTINGS,
+        allocator_config=allocator.config,
+    )
+    candidate_metadata = current_candidate_metadata(
+        horizon=horizon,
+        allocator=allocator_name,
+        seed=seed,
+        allocator_config=allocator.config,
     )
 
     all_daily_returns: list[float] = []
@@ -398,6 +411,12 @@ def run_walk_forward_sl(
                 promo_mdd = dd
                 
     stress_summary = {
+        "candidate_id": candidate_metadata["candidate_id"],
+        "candidate_metadata": candidate_metadata,
+        "horizon": horizon,
+        "allocator": allocator_name,
+        "seed": seed,
+        "generated_at": candidate_metadata["generated_at"],
         "tests": {
             "hard_disaster_stress": {
                 "total_return": stress_hist[-1] - 1.0,
@@ -412,6 +431,8 @@ def run_walk_forward_sl(
     stress_path = out_results / "stress_summary.json"
     stress_path.parent.mkdir(parents=True, exist_ok=True)
     stress_path.write_text(json.dumps(stress_summary, indent=2), encoding="utf-8")
+    seed_stress_path = out_results / f"stress_summary_sl_{allocator_name}_h{horizon}_seed{seed}.json"
+    seed_stress_path.write_text(json.dumps(stress_summary, indent=2), encoding="utf-8")
     # -----------------------------
 
     if output_dir:
@@ -422,6 +443,8 @@ def run_walk_forward_sl(
                     "horizon": horizon,
                     "allocator": allocator_name,
                     "seed": seed,
+                    "candidate_id": candidate_metadata["candidate_id"],
+                    "candidate_metadata": candidate_metadata,
                     "metrics_path": str(path),
                     "overall": overall_metrics,
                     "periods": list(seed_metrics["periods"].keys()),
@@ -436,7 +459,11 @@ def run_walk_forward_sl(
         "horizon": horizon,
         "allocator": allocator_name,
         "seed": seed,
+        "candidate_id": candidate_metadata["candidate_id"],
+        "candidate_metadata": candidate_metadata,
         "metrics_path": str(path),
+        "stress_summary_path": str(seed_stress_path),
+        "stress_summary": stress_summary,
         "overall": overall_metrics,
         "periods": seed_metrics["periods"],
         "skipped_periods": seed_metrics["skipped_periods"],

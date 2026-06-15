@@ -19,17 +19,17 @@ class RuleBasedAllocatorConfig:
     top_k: int = 5
     hysteresis_rank: int = 10
     weight_band: float = 0.06
-    enable_vol_target: bool = True
+    enable_vol_target: bool = False
     target_vol_annual: float = 0.15
     vol_floor: float = 0.05
     enable_trend_filter: bool = True
-    weighting_method: str = "abs_vol_parity"  # 'inv_vol', 'equal', or 'abs_vol_parity'
+    weighting_method: str = "equal"  # 'inv_vol', 'equal', or 'abs_vol_parity'
     yellow_mdd: float = 0.20
     yellow_max_exposure: float = 0.50
     red_mdd: float = 0.35
     red_max_exposure: float = 0.0
     max_single_weight: float = 0.20
-    min_score: float = 1e-4
+    min_score: float = 0.005
     enable_momentum_scaling: bool = False
     momentum_scale_factor: float = 5.0
 
@@ -61,14 +61,8 @@ class RuleBasedAllocator(PortfolioAllocator):
         if not scores:
             return TargetPortfolio(target_weights={}, cash_weight=1.0)
 
-        # Apply score penalty for high volatility
-        adjusted_scores = {}
-        for t, s in scores.items():
-            v = max(float(vols.get(t, cfg.vol_floor)), cfg.vol_floor)
-            penalty = 1.0
-            if v > 0.40:
-                penalty = (0.40 / v) ** 2
-            adjusted_scores[t] = s * penalty
+        # Use pure model scores
+        adjusted_scores = dict(scores)
 
         sorted_scores = sorted(
             adjusted_scores.items(),
@@ -85,8 +79,11 @@ class RuleBasedAllocator(PortfolioAllocator):
                 selected.add(ticker)
 
         dynamic_min_score = cfg.min_score
-        if market_context and (market_context.macro_guard_level == "WARN" or market_context.macro_guard_level == "CRITICAL"):
-            dynamic_min_score = max(cfg.min_score, 0.005)
+        if market_context:
+            if market_context.macro_guard_level in ("WARN", "CRITICAL"):
+                dynamic_min_score = max(dynamic_min_score, 0.015)
+            if market_context.market_volatility is not None and market_context.market_volatility > 0.20:
+                dynamic_min_score = max(dynamic_min_score, 0.010)
 
         # Filter available names
         valid_tickers = []
@@ -186,6 +183,7 @@ class RuleBasedAllocator(PortfolioAllocator):
             stock_weights = {ticker: weight * scale for ticker, weight in stock_weights.items()}
 
         stock_weights = self._apply_weight_hysteresis(stock_weights, state.positions, cfg.weight_band)
+        stock_weights = self._cap_single_names(stock_weights, cfg.max_single_weight)
         stock_total = sum(stock_weights.values())
         cash_weight = max(0.0, 1.0 - stock_total)
 
@@ -241,7 +239,12 @@ class RuleBasedAllocator(PortfolioAllocator):
         if level == "CRITICAL":
             return min(exposure, 0.0)
         if level == "WARN":
-            return min(exposure, 0.50)
+            exposure = min(exposure, 0.25)
+            
+        if market_context.market_volatility is not None and market_context.market_volatility > 0.20:
+            vol_cap = 0.20 / market_context.market_volatility
+            exposure = min(exposure, vol_cap)
+            
         return exposure
 
     @staticmethod

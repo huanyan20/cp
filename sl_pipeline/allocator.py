@@ -29,6 +29,7 @@ class MarketContext:
     """Optional macro / guard overlay inputs (O6)."""
 
     macro_guard_level: str = "OK"
+    market_volatility: float | None = None
 
 
 @dataclass

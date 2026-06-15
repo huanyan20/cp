@@ -164,6 +164,10 @@ def _require_signal_guard(signal_path: str = "signal.json", guard_path: str = "c
     guard = _load_json(guard_path)
     if guard.get("level") != "OK":
         raise RuntimeError(f"macro guard is not OK: {guard.get('level')}")
+    metadata = signal.get("metadata") or {}
+    gate_status = str(metadata.get("gate_status", "")).strip().lower()
+    if gate_status not in {"core", "full"}:
+        raise RuntimeError(f"promotion gate is not approved for RPA: {gate_status or 'missing'}")
 
 
 def _require_dry_run_diff(signal_path: str = "signal.json"):

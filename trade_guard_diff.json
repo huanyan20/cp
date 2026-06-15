@@ -1,22 +1,18 @@
 {
-    "signal_id": "sl-h10-20260615",
+    "signal_id": "sl-h10-20260616",
     "aid": "dummy_aid",
-    "created_at": "2026-06-15T14:16:23.496378Z",
+    "created_at": "2026-06-15T17:59:46.723934Z",
     "current_lots": {},
     "target_lots": {
-        "6409": 0,
-        "2382": 0,
-        "2324": 1,
-        "2408": 0,
-        "5347": 0
+        "2356": 3
     },
     "plan": {
         "buys": {
-            "2324": 1
+            "2356": 3
         },
         "sells": {}
     },
-    "net_buy_lots": 1,
+    "net_buy_lots": 3,
     "net_sell_lots": 0,
     "risk_checks": {
         "checked": true,
@@ -24,7 +20,7 @@
         "reasons": [],
         "max_single_weight": 0.35,
         "max_total_exposure": 1.0,
-        "observed_max_single_weight": 0.0805872673038821,
-        "observed_total_exposure": 0.34441875053497695
+        "observed_max_single_weight": 0.2,
+        "observed_total_exposure": 1.0
     }
 }

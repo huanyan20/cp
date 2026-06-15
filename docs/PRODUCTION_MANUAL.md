@@ -1,6 +1,6 @@
 # Production Manual
 
-> Strategy snapshot: 2026-06-14
+> Strategy snapshot: 2026-06-16
 > Live trading remains blocked until promotion gate explicitly approves a current SL-first candidate.
 
 ## 1. Production Policy
@@ -28,19 +28,21 @@ Before enabling live trading:
 | Area | Status |
 |---|---|
 | SAC | Not promotable; research-only. |
-| SL | **BLOCKED**: h10 circuit-breaker behavior under repair. |
-| Live | Ready for `trade_guard` dry-run phase. |
-| RPA | Use only after successful dry-run validation. |
+| SL | **BLOCKED / high risk**: active candidate `sl_rule_h10_top20_equal_no_voltarget` has not passed the current multiseed gate. |
+| Live | `trade_guard` dry-run observation only. |
+| RPA | Blocked unless the active candidate gate reports `core` or `full` approval and dry-run validation passes. |
 
 ## 4. Deployment Checklist
 
 ```powershell
 .\env\Scripts\python.exe -m sl_pipeline.walk_forward_sl --allocator rule --gate --seed 42
-.\env\Scripts\python.exe experiment_report.py
+.\env\Scripts\python.exe scripts\run_multi_seed_sl.py --horizon 10 --seeds 42,43,44 --allow-blocked-exit-zero
+.\env\Scripts\python.exe scripts\experiment_report.py
+.\env\Scripts\python.exe scripts\sl_status_check.py
 .\env\Scripts\python.exe rpa_pipeline\signal_validator.py
 ```
 
-Only proceed to CMoney automation when the current candidate is gate-approved and the dry-run diff is acceptable.
+Only proceed to CMoney automation when the active candidate is gate-approved and the dry-run diff is acceptable.
 
 ## 5. Risk Notes
 

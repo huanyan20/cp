@@ -18,7 +18,13 @@ SETTINGS = load_settings()
 
 def run_command(cmd: list[str]) -> bool:
     logger.info(f"Executing: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     if result.returncode != 0:
         logger.error(f"Command failed with exit code {result.returncode}")
         logger.error(f"STDOUT: {result.stdout}")
@@ -144,10 +150,13 @@ def main():
             report = {
                 "date": datetime.now().strftime("%Y-%m-%d"),
                 "signal_id": signal_id,
+                "candidate_id": signal_data.get("metadata", {}).get("candidate_id"),
+                "gate_status": signal_data.get("metadata", {}).get("gate_status"),
                 "top_holdings": top_holdings,
                 "total_exposure": round(risk.get("observed_total_exposure", 0.0), 4),
                 "max_single_weight": round(risk.get("observed_max_single_weight", 0.0), 4),
                 "risk_check_passed": passed,
+                "rpa_allowed": passed and signal_data.get("metadata", {}).get("gate_status") in {"core", "full"},
                 "generated_buys": len(buys),
                 "generated_sells": len(sells),
                 "macro_guard_level": signal_data.get("metadata", {}).get("macro_guard_level", "OK"),
@@ -172,7 +181,10 @@ def main():
             logger.warning(f"Failed to append daily dry-run report: {e}")
         
         if passed:
-            logger.info("\nSUCCESS: Dry-run validation passed. The model signal is safe for execution.")
+            logger.info(
+                "\nSUCCESS: Dry-run validation passed. This is dry-run only; live/RPA "
+                "still requires an approved promotion gate."
+            )
         else:
             logger.error("\nFAILURE: Dry-run validation blocked by risk checks. Do not execute this signal.")
             sys.exit(1)

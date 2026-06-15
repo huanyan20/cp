@@ -215,13 +215,13 @@ class RuleBasedAllocatorTests(unittest.TestCase):
         target = allocator.allocate(scores, vols, state)
         self.assertIn("S5", target.target_weights)
 
-    def test_weight_band_preserves_small_delta(self):
+    def test_weight_band_respects_single_name_cap(self):
         allocator = RuleBasedAllocator(RuleBasedAllocatorConfig(top_k=1, weight_band=0.05, target_vol_annual=1.0))
         scores = {"A": 1.0}
         vols = {"A": 0.2}
-        state = PortfolioState(positions={"A": 0.30})
+        state = PortfolioState(positions={"A": 0.22})
         target = allocator.allocate(scores, vols, state)
-        self.assertAlmostEqual(target.target_weights["A"], 0.30, places=3)
+        self.assertAlmostEqual(target.target_weights["A"], 0.20, places=3)
 
     def test_macro_critical_flattens_exposure(self):
         allocator = RuleBasedAllocator(RuleBasedAllocatorConfig(top_k=2, target_vol_annual=1.0))

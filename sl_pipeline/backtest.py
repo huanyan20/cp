@@ -13,6 +13,7 @@ from metrics_utils import calculate_metrics
 from research_pipeline import write_metrics_json
 from settings import load_settings
 from sl_pipeline.allocator import MarketContext, PortfolioAllocator, PortfolioState, TargetPortfolio
+from sl_pipeline.candidate import current_candidate_metadata
 from trading_env import COMMISSION_RATE, SLIPPAGE_RATE, TAX_RATE_SELL, SLIPPAGE_MULTIPLIER
 
 if TYPE_CHECKING:
@@ -575,15 +576,26 @@ def build_sl_seed_metrics(
     seed: int,
     allocator: str = "rule",
     settings: AppSettings | None = None,
+    allocator_config: object | None = None,
 ) -> dict:
     """Metrics JSON template for SL walk-forward (Gate-compatible namespace)."""
     settings = settings or load_settings()
+    candidate_metadata = current_candidate_metadata(
+        horizon=horizon,
+        allocator=allocator,
+        seed=seed,
+        allocator_config=allocator_config,
+    )
     return {
         "strategy": "sl_rule",
         "allocator": allocator,
         "algo": "sl_lightgbm",
         "horizon": horizon,
         "seed": seed,
+        "candidate_id": candidate_metadata["candidate_id"],
+        "label_mode": candidate_metadata["label_mode"],
+        "generated_at": candidate_metadata["generated_at"],
+        "candidate_metadata": candidate_metadata,
         "cash_mode": "enabled",
         "enable_cash_action": True,
         "enable_margin_short": False,
@@ -597,6 +609,9 @@ def build_sl_seed_metrics(
             "horizon": horizon,
             "vol_target": settings.research.sl_target_vol,
             "top_k": settings.research.default_topk,
+            "candidate_id": candidate_metadata["candidate_id"],
+            "label_mode": candidate_metadata["label_mode"],
+            "allocator_config": candidate_metadata["allocator_config"],
         },
         "overall": {},
         "periods": {},

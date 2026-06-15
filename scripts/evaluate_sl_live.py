@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -20,6 +20,11 @@ from data_pipeline.universe_builder import get_universe_builder
 from settings import load_settings
 from sl_pipeline.allocator import MarketContext, PortfolioState
 from sl_pipeline.backtest import build_vols_as_of, build_trends_as_of
+from sl_pipeline.candidate import (
+    CURRENT_CANDIDATE_ID,
+    config_snapshot,
+    current_candidate_metadata,
+)
 from sl_pipeline.rule_based_allocator import RuleBasedAllocator, RuleBasedAllocatorConfig
 from sl_pipeline.signal_generator import SignalGenerator, SignalGeneratorConfig
 from stock_universe import MACRO_TICKERS_RL
@@ -241,12 +246,21 @@ def main():
             market_context = MarketContext(macro_guard_level=level)
             logger.info(f"Overriding macro guard level to: {level} due to moving average trends")
 
+    default_allocator_config = RuleBasedAllocatorConfig()
     allocator = RuleBasedAllocator(RuleBasedAllocatorConfig(
         top_k=args.top_k,
-        max_single_weight=SETTINGS.risk_limits.max_single_weight,
+        max_single_weight=min(
+            SETTINGS.risk_limits.max_single_weight,
+            default_allocator_config.max_single_weight,
+        ),
         target_vol_annual=SETTINGS.research.sl_target_vol,
         trailing_stop_threshold=SETTINGS.research.sl_trailing_stop
     ))
+    candidate_metadata = current_candidate_metadata(
+        horizon=args.horizon,
+        allocator="rule",
+        allocator_config=allocator.config,
+    )
 
     logger.info("Allocating target weights...")
     target = allocator.allocate(today_scores, vols, state, market_context)
@@ -279,7 +293,10 @@ def main():
             gate_data = json.loads(gate_file.read_text(encoding="utf-8"))
             prom_gate = gate_data.get("promotion_gate", {})
             metrics_source = gate_file.name
-            if prom_gate.get("full_gate_approved"):
+            gate_candidate_id = gate_data.get("candidate_id")
+            if gate_candidate_id != CURRENT_CANDIDATE_ID:
+                gate_status = f"blocked: candidate mismatch ({gate_candidate_id})"
+            elif prom_gate.get("full_gate_approved"):
                 gate_status = "full"
             elif prom_gate.get("core_gate_approved"):
                 gate_status = "core"
@@ -296,18 +313,24 @@ def main():
         "top_k": args.top_k,
         "target_vol": SETTINGS.research.sl_target_vol,
         "trailing_stop": SETTINGS.research.sl_trailing_stop,
-        "max_single_weight": SETTINGS.risk_limits.max_single_weight
+        "max_single_weight": allocator.config.max_single_weight,
+        "candidate_id": CURRENT_CANDIDATE_ID,
+        "label_mode": candidate_metadata["label_mode"],
+        "allocator_config": config_snapshot(allocator.config),
     }
     config_hash = hashlib.sha256(json.dumps(strategy_config, sort_keys=True).encode("utf-8")).hexdigest()[:8]
 
     signal = {
         "signal_id": signal_id,
-        "created_at": datetime.utcnow().isoformat() + "Z",
+        "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "aid": args.aid,
         "source": f"SL LightGBM h{args.horizon} Live",
         "target_weights": weights,
         "target_lots": target_lots,
         "metadata": {
+            "candidate_id": CURRENT_CANDIDATE_ID,
+            "label_mode": candidate_metadata["label_mode"],
+            "candidate_metadata": candidate_metadata,
             "strategy_config": strategy_config,
             "config_hash": config_hash,
             "gate_status": gate_status,

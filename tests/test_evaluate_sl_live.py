@@ -80,6 +80,6 @@ def test_evaluate_sl_live_success(tmp_path):
                     assert "target_lots" in signal
                     assert "2330.TW" in signal["target_lots"]
                     
-                    # 10,000,000 * 0.35 weight max = 3,500,000
-                    # 3,500,000 / (500 * 1000) = 7 lots
-                    assert signal["target_lots"]["2330.TW"] == 7
+                    # 10,000,000 * 0.20 weight max = 2,000,000
+                    # 2,000,000 / (500 * 1000) = 4 lots
+                    assert signal["target_lots"]["2330.TW"] == 4

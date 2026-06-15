@@ -13,6 +13,11 @@ import pandas as pd
 
 from promotion_gate import PromotionResult, run_promotion_gate
 from settings import load_settings
+from sl_pipeline.candidate import (
+    CURRENT_CANDIDATE_ID,
+    current_candidate_metadata,
+    utc_now_iso,
+)
 
 SETTINGS = load_settings()
 
@@ -49,12 +54,26 @@ def read_sl_metric_files(results_dir: str | Path) -> list[dict]:
                 continue
         if "overall" not in data or not data["overall"]:
             continue
+        metadata = data.get("candidate_metadata", {})
+        allocator = match.group("allocator")
+        horizon = int(match.group("horizon"))
+        candidate_id = (
+            data.get("candidate_id")
+            or metadata.get("candidate_id")
+            or f"legacy_sl_{allocator}_h{horizon}"
+        )
+        label_mode = data.get("label_mode") or metadata.get("label_mode") or "legacy"
         records.append(
             {
                 "path": path,
-                "allocator": match.group("allocator"),
-                "horizon": int(match.group("horizon")),
-                "variant": f"sl_{match.group('allocator')}_h{match.group('horizon')}",
+                "metrics_modified_at": (
+                    Path(path).stat().st_mtime if Path(path).exists() else None
+                ),
+                "allocator": allocator,
+                "horizon": horizon,
+                "variant": f"sl_{allocator}_h{horizon}",
+                "candidate_id": candidate_id,
+                "label_mode": label_mode,
                 **data,
             }
         )
@@ -84,6 +103,10 @@ def build_sl_raw_summary(records: list[dict]) -> list[dict]:
                 "variant": record.get("variant", "sl_rule"),
                 "allocator": record.get("allocator", "rule"),
                 "horizon": record.get("horizon", 5),
+                "candidate_id": record.get("candidate_id", "legacy"),
+                "label_mode": record.get("label_mode", "legacy"),
+                "generated_at": record.get("generated_at"),
+                "metrics_modified_at": record.get("metrics_modified_at"),
                 "seed": record.get("seed"),
                 "path": record.get("path", ""),
                 **{key: float(overall.get(key, 0.0)) for key in METRIC_KEYS},
@@ -92,17 +115,34 @@ def build_sl_raw_summary(records: list[dict]) -> list[dict]:
 
     frame = pd.DataFrame(rows)
     raw_summary: list[dict] = []
-    group_cols = ["algo", "cash_mode", "variant", "allocator", "horizon"]
+    group_cols = [
+        "algo",
+        "cash_mode",
+        "variant",
+        "allocator",
+        "horizon",
+        "candidate_id",
+        "label_mode",
+    ]
     for keys, group in frame.groupby(group_cols):
-        algo, cash_mode, variant, allocator, horizon = keys
+        algo, cash_mode, variant, allocator, horizon, candidate_id, label_mode = keys
         entry: dict[str, Any] = {
             "algo": algo,
             "cash_mode": cash_mode,
             "variant": variant,
             "allocator": allocator,
             "horizon": int(horizon),
+            "candidate_id": candidate_id,
+            "label_mode": label_mode,
             "seeds": sorted(int(s) for s in group["seed"].unique()),
+            "source_files": sorted(str(p) for p in group["path"].dropna().unique()),
+            "metric_generated_at": sorted(
+                str(v) for v in group["generated_at"].dropna().unique()
+            ),
         }
+        modified = group["metrics_modified_at"].dropna()
+        if not modified.empty:
+            entry["latest_metrics_mtime"] = float(modified.max())
         for key in METRIC_KEYS:
             mean = float(group[key].mean())
             std = float(group[key].std(ddof=0)) if len(group) > 1 else 0.0
@@ -131,6 +171,8 @@ def build_sl_period_dataframe(records: list[dict]) -> pd.DataFrame:
                     "algo": record.get("algo", "sl_lightgbm"),
                     "cash_mode": record.get("cash_mode", "enabled"),
                     "variant": record.get("variant", "sl_rule"),
+                    "candidate_id": record.get("candidate_id", "legacy"),
+                    "label_mode": record.get("label_mode", "legacy"),
                     "seed": record.get("seed"),
                     "period": period_name,
                     "test_start": metrics.get("test_start"),
@@ -169,6 +211,7 @@ def run_sl_promotion_gate(
     turnover_limit: float | None = None,
     baseline_summary: dict[str, Any] | None = None,
     target_horizon: int | None = None,
+    target_candidate_id: str | None = None,
 ) -> tuple[PromotionResult, list[dict], pd.DataFrame]:
     """Run promotion gate on SL metrics (no RL baseline/ablation/stress gates)."""
     sortino_threshold = (
@@ -216,6 +259,8 @@ def run_sl_promotion_gate(
 
     if target_horizon is not None:
         records = [r for r in records if r.get("horizon") == target_horizon]
+    if target_candidate_id is not None:
+        records = [r for r in records if r.get("candidate_id") == target_candidate_id]
 
     if baseline_summary is None:
         try:
@@ -275,13 +320,38 @@ def save_sl_gate_result(
     allocator: str = "rule",
     metrics_path: str | None = None,
     seed: int | None = None,
+    candidate_metadata: dict[str, Any] | None = None,
 ) -> Path:
     """Persist SL gate outcome for experiment_report / audit."""
+    candidate_id = (
+        raw_summary[0].get("candidate_id")
+        if raw_summary
+        else CURRENT_CANDIDATE_ID
+    )
+    candidate_metadata = candidate_metadata or current_candidate_metadata(
+        horizon=horizon,
+        allocator=allocator,
+        seed=seed,
+    )
+    source_metric_files = sorted(
+        {
+            str(path)
+            for entry in raw_summary
+            for path in entry.get("source_files", [])
+        }
+    )
+    if metrics_path:
+        source_metric_files.append(metrics_path)
+        source_metric_files = sorted(set(source_metric_files))
     payload = {
         "strategy": "sl_rule",
         "allocator": allocator,
         "horizon": horizon,
+        "candidate_id": candidate_id,
+        "candidate_metadata": candidate_metadata,
+        "generated_at": utc_now_iso(),
         "metrics_path": metrics_path,
+        "source_metric_files": source_metric_files,
         "promotion_gate": promotion_result_to_dict(result),
         "summary": raw_summary,
     }

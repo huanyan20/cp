@@ -45,14 +45,19 @@ def build_cross_demean_frame(
     enriched: dict[str, pd.DataFrame],
     horizon: int,
 ) -> pd.DataFrame:
-    """Wide frame of cross-demeaned forward returns (index=date, columns=tickers)."""
+    """Wide frame of cross-demeaned forward returns, filtered to top quantile."""
     raw = {
         ticker: forward_log_return_t1(df["log_return"], horizon)
         for ticker, df in enriched.items()
     }
     raw_df = pd.DataFrame(raw)
     median = raw_df.median(axis=1, skipna=True)
-    return raw_df.sub(median, axis=0).clip(lower=0.0)
+    demeaned = raw_df.sub(median, axis=0)
+    
+    # Only keep the signal if it's in the top 20% AND it's positive
+    rank = raw_df.rank(axis=1, pct=True)
+    valid = (rank >= 0.80) & (demeaned > 0.0)
+    return demeaned.where(valid, 0.0)
 
 
 def build_labeled_panel(
