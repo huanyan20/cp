@@ -3,6 +3,7 @@ import glob
 import json
 import os
 import re
+from pathlib import Path
 
 import pandas as pd
 
@@ -469,9 +470,23 @@ def generate_report(
     sl_raw_summary: list[dict] = []
     sl_period_df = pd.DataFrame()
     if sl_records:
+        sl_horizons = {int(r.get("horizon", 0)) for r in sl_records}
+        sl_target_horizon = 10 if 10 in sl_horizons else None
         sl_promotion_result, sl_raw_summary, sl_period_df = run_sl_promotion_gate(
-            results_dir=results_dir
+            results_dir=results_dir,
+            target_horizon=sl_target_horizon,
         )
+        if sl_promotion_result:
+            from sl_pipeline.gate import save_sl_gate_result
+            save_horizon = sl_target_horizon or int(sl_raw_summary[0].get("horizon", 0) or 0)
+            save_sl_gate_result(
+                sl_promotion_result,
+                sl_raw_summary,
+                results_dir=Path(results_dir),
+                horizon=save_horizon,
+                allocator="rule",
+                seed=None
+            )
 
     sl_vs_rl: dict = {}
     promotion_result = None

@@ -28,6 +28,7 @@ class BacktestConfig:
     vol_floor: float = 0.05
     initial_value: float = 1.0
     liquidity_stress: bool = False
+    cost_multiplier: float = 1.0
 
 
 def rolling_annualized_vol(log_returns: pd.Series, window: int, min_obs: int, vol_floor: float) -> float:
@@ -36,6 +37,65 @@ def rolling_annualized_vol(log_returns: pd.Series, window: int, min_obs: int, vo
     if len(recent) < min_obs:
         return vol_floor
     return max(float(recent.std() * np.sqrt(TRADING_DAYS_PER_YEAR)), vol_floor)
+
+
+def build_trends_as_of(
+    enriched: dict[str, pd.DataFrame],
+    tickers: list[str],
+    date: pd.Timestamp,
+    *,
+    trend_window: int = 60,
+) -> dict[str, float]:
+    """Calculate the absolute momentum (cumulative log return) over a window."""
+    trends: dict[str, float] = {}
+    for ticker in tickers:
+        if ticker not in enriched:
+            trends[ticker] = 1.0
+            continue
+        df = enriched[ticker]
+        idx = df.index.searchsorted(date, side="right") - 1
+        if idx < 0:
+            trends[ticker] = 1.0
+            continue
+        start_idx = max(0, idx - trend_window + 1)
+        hist_ret = pd.to_numeric(df["log_return"].iloc[start_idx : idx + 1], errors="coerce").dropna()
+        if len(hist_ret) < 10:
+            trends[ticker] = 1.0
+            continue
+        trends[ticker] = float(np.sum(hist_ret))
+    return trends
+
+
+def build_ma_distance_as_of(
+    enriched: dict[str, pd.DataFrame],
+    tickers: list[str],
+    date: pd.Timestamp,
+    *,
+    window: int = 20,
+) -> dict[str, float]:
+    """Calculate the relative distance of the current price to the moving average."""
+    distances: dict[str, float] = {}
+    for ticker in tickers:
+        if ticker not in enriched:
+            distances[ticker] = 0.0
+            continue
+        df = enriched[ticker]
+        idx = df.index.searchsorted(date, side="right") - 1
+        if idx < 0:
+            distances[ticker] = 0.0
+            continue
+        start_idx = max(0, idx - window + 1)
+        hist_ret = pd.to_numeric(df["log_return"].iloc[start_idx : idx + 1], errors="coerce").dropna()
+        if len(hist_ret) < window // 2:
+            distances[ticker] = 0.0
+            continue
+        
+        # Price path starting from 1.0
+        price_path = np.exp(hist_ret.cumsum())
+        current_p = float(price_path.iloc[-1])
+        ma = float(price_path.mean())
+        distances[ticker] = (current_p / ma) - 1.0
+    return distances
 
 
 def build_trading_calendar(
@@ -79,6 +139,7 @@ def execute_rebalance(
     target_weights: dict[str, float],
     tickers: list[str],
     open_returns: dict[str, float],
+    cost_multiplier: float = 1.0,
 ) -> tuple[dict[str, float], float, float]:
     """Apply target weights, deduct friction, return (weights, turnover, new_value)."""
     turnover = 0.0
@@ -101,7 +162,7 @@ def execute_rebalance(
         turnover += delta
         if delta > 1e-8:
             trade_amount = delta * portfolio_value
-            total_cost += trade_amount * trade_cost_rate(prev, target)
+            total_cost += trade_amount * trade_cost_rate(prev, target) * cost_multiplier
         final_weights[ticker] = target
 
     new_value = max(portfolio_value - total_cost, 1e-12)
@@ -123,7 +184,12 @@ def build_vols_as_of(
             vols[ticker] = vol_floor
             continue
         df = enriched[ticker]
-        hist = df.loc[df.index <= date, "log_return"]
+        idx = df.index.searchsorted(date, side="right") - 1
+        if idx < 0:
+            vols[ticker] = vol_floor
+            continue
+        start_idx = max(0, idx - vol_window + 1)
+        hist = df["log_return"].iloc[start_idx : idx + 1]
         vols[ticker] = rolling_annualized_vol(hist, vol_window, min_vol_obs, vol_floor)
     return vols
 
@@ -148,14 +214,18 @@ def simulate_period(
 
     if initial_state:
         portfolio_value = initial_state.portfolio_value
-        peak_value = initial_state.peak_value
         positions = dict(initial_state.positions)
         cash_weight = initial_state.cash_weight
+        position_cum_rets = dict(initial_state.position_cum_rets)
+        position_peaks = dict(initial_state.position_peaks)
+        cooldown_days = dict(initial_state.cooldown_days)
     else:
         portfolio_value = cfg.initial_value
-        peak_value = portfolio_value
         positions: dict[str, float] = {}
         cash_weight = 1.0
+        position_cum_rets: dict[str, float] = {}
+        position_peaks: dict[str, float] = {}
+        cooldown_days: dict[str, int] = {}
 
     portfolio_hist = [portfolio_value]
     daily_returns: list[float] = []
@@ -201,6 +271,12 @@ def simulate_period(
         signal_date = dates[i]
         return_date = dates[i + 1]
 
+        for t in list(cooldown_days.keys()):
+            if cooldown_days[t] > 1:
+                cooldown_days[t] -= 1
+            else:
+                del cooldown_days[t]
+
         score_row = {
             ticker: float(scores[ticker].loc[signal_date])
             for ticker in tickers
@@ -217,33 +293,93 @@ def simulate_period(
             min_vol_obs=cfg.min_vol_obs,
             vol_floor=cfg.vol_floor,
         )
-        rolling_mdd = (peak_value - portfolio_value) / max(peak_value, 1e-12)
+        trends = build_trends_as_of(
+            enriched,
+            tickers,
+            signal_date,
+            trend_window=60,
+        )
+        short_trends = build_trends_as_of(
+            enriched,
+            tickers,
+            signal_date,
+            trend_window=20,
+        )
+        lookback_window = 126
+        recent_hist = portfolio_hist[-lookback_window:]
+        rolling_peak = max(recent_hist)
+        rolling_mdd = (rolling_peak - portfolio_value) / max(rolling_peak, 1e-12)
+
+        position_mdds = {}
+        for ticker in positions:
+            if ticker in position_cum_rets and position_peaks.get(ticker, 1.0) > 0:
+                peak = position_peaks[ticker]
+                current = position_cum_rets[ticker]
+                position_mdds[ticker] = (peak - current) / peak
+
         state = PortfolioState(
             positions=dict(positions),
             cash_weight=cash_weight,
             portfolio_value=portfolio_value,
-            peak_value=peak_value,
+            peak_value=rolling_peak,
             rolling_mdd=float(rolling_mdd),
+            position_mdds=position_mdds,
+            position_cum_rets=dict(position_cum_rets),
+            position_peaks=dict(position_peaks),
+            cooldown_days=dict(cooldown_days),
         )
 
         daily_market_context = market_context
         if daily_market_context is None:
+            level = "OK"
+            market_trends = build_trends_as_of(enriched, ["^TWII", "^IXIC"], signal_date, trend_window=60)
+            twii_down = market_trends.get("^TWII", 1.0) < 0.0
+            ixic_down = market_trends.get("^IXIC", 1.0) < 0.0
+            if twii_down and ixic_down:
+                level = "CRITICAL"
+            elif twii_down or ixic_down:
+                level = "WARN"
+
             sig_date_obj = signal_date.date()
             if sig_date_obj in macro_eval:
-                daily_market_context = MarketContext(macro_guard_level=macro_eval[sig_date_obj])
+                gap_level = macro_eval[sig_date_obj]
+                if gap_level == "CRITICAL" or (gap_level == "WARN" and level == "OK"):
+                    level = gap_level
+            
+            daily_market_context = MarketContext(macro_guard_level=level)
 
-        # Trade Guard Circuit Breaker
-        daily_loss = 0.0
-        if len(portfolio_hist) >= 2:
-            prev_day_pv = portfolio_hist[-2]
-            daily_loss = (prev_day_pv - portfolio_value) / max(prev_day_pv, 1e-12)
+        ma_20_distance = build_ma_distance_as_of(enriched, tickers, signal_date, window=20)
+        ma_60_distance = build_ma_distance_as_of(enriched, tickers, signal_date, window=60)
+        ma_distances = {20: ma_20_distance, 60: ma_60_distance}
 
-        if daily_loss > 0.05 or rolling_mdd > 0.15:
-            # Block the trade and maintain current positions
-            print(f"[{signal_date.date()}] Circuit breaker tripped! MDD: {rolling_mdd:.2%}, Daily Loss: {daily_loss:.2%}")
-            target = TargetPortfolio(target_weights=dict(positions), cash_weight=max(0.0, 1.0 - sum(positions.values())))
-        else:
-            target = allocator.allocate(score_row, vols, state, daily_market_context)
+        target = allocator.allocate(
+            score_row, 
+            vols, 
+            state, 
+            market_context=daily_market_context, 
+            trends=trends,
+            short_trends=short_trends,
+            ma_distances=ma_distances,
+        )
+
+        ma_filter_enabled = getattr(allocator.config, "enable_ma_filter", False)
+        ts_enabled = getattr(allocator.config, "enable_trailing_stop", False)
+        cooldown_duration = getattr(allocator.config, "cooldown_duration", 10)
+        ts_thresh = getattr(allocator.config, "trailing_stop_threshold", 0.15)
+        ma_filter_windows = getattr(allocator.config, "ma_filter_windows", [20])
+
+        for t in positions:
+            if target.target_weights.get(t, 0.0) == 0.0:
+                is_cooldown_triggered = False
+                if ts_enabled and position_mdds.get(t, 0.0) >= ts_thresh:
+                    is_cooldown_triggered = True
+                if ma_filter_enabled:
+                    for w in ma_filter_windows:
+                        if ma_distances.get(w, {}).get(t, 1.0) < 0.0:
+                            is_cooldown_triggered = True
+                            break
+                if is_cooldown_triggered:
+                    cooldown_days[t] = cooldown_duration
 
         open_returns = {}
         log_returns = {}
@@ -287,6 +423,7 @@ def simulate_period(
             target.target_weights,
             tickers,
             open_returns,
+            cost_multiplier=cfg.cost_multiplier,
         )
         cash_weight = max(0.0, 1.0 - sum(positions.values()))
 
@@ -295,13 +432,24 @@ def simulate_period(
         for ticker in tickers:
             weight = positions.get(ticker, 0.0)
             if weight <= 1e-8:
+                if ticker in position_cum_rets:
+                    del position_cum_rets[ticker]
+                if ticker in position_peaks:
+                    del position_peaks[ticker]
                 continue
+            
             intraday_ret = np.exp(log_returns[ticker] - open_returns[ticker]) - 1.0
             intraday_pnl += portfolio_value * weight * intraday_ret
             
+            if ticker not in position_cum_rets:
+                position_cum_rets[ticker] = 1.0 + intraday_ret
+                position_peaks[ticker] = max(1.0, position_cum_rets[ticker])
+            else:
+                daily_ret = np.exp(log_returns[ticker])
+                position_cum_rets[ticker] *= daily_ret
+                position_peaks[ticker] = max(position_peaks[ticker], position_cum_rets[ticker])
+            
         portfolio_value = max(portfolio_value + intraday_pnl, 1e-12)
-        if portfolio_value > peak_value:
-            peak_value = portfolio_value
 
         daily_returns.append((portfolio_value / max(prev_value, 1e-12)) - 1.0)
         positions_hist.append([float(positions.get(ticker, 0.0)) for ticker in tickers])
@@ -321,7 +469,10 @@ def simulate_period(
         "final_positions": positions,
         "final_cash_weight": cash_weight,
         "final_portfolio_value": portfolio_value,
-        "final_peak_value": peak_value,
+        "final_peak_value": portfolio_value, # Obsolete, just send PV
+        "final_position_cum_rets": position_cum_rets,
+        "final_position_peaks": position_peaks,
+        "final_cooldown_days": cooldown_days,
     }
 
 

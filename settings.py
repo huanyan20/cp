@@ -72,6 +72,10 @@ class ResearchSettings(BaseSettings):
     env_config_version: Optional[str] = Field(None, validation_alias="RESEARCH_ENV_CONFIG_VERSION")
     torch_device: str = Field("auto", validation_alias="RESEARCH_DEVICE")
 
+    # SL strategy specific settings
+    sl_target_vol: float = Field(0.12, validation_alias="RESEARCH_SL_TARGET_VOL")
+    sl_trailing_stop: float = Field(0.15, validation_alias="RESEARCH_SL_TRAILING_STOP")
+
     # Non-prefixed env vars (aliased explicitly)
     walk_forward_timesteps: int = Field(300_000, validation_alias="WALK_FORWARD_TIMESTEPS")
     walk_forward_cash_mode: str = Field("enabled", validation_alias="WALK_FORWARD_CASH_MODE")

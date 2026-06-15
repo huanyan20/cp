@@ -59,7 +59,7 @@ Passing smoke does not mean promotion. It only allows a candidate-sized run.
 
 ## 5. SL Priorities
 
-1. SL h10 is the production candidate and has **passed the promotion gates** with +134% return and 32% MDD.
+1. SL h10 is **BLOCKED / under repair** and does not pass current promotion gates.
 2. The current focus is live integration (e.g. `trade_guard.py` dry-run compatibility) and monitoring real-world execution.
 3. Keep monitoring the model's feature importance (especially trend vs mean-reversion bias) and the allocator's behavior.
 4. Add more interpretable diagnostics if necessary.

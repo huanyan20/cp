@@ -9,15 +9,19 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 
-@dataclass
+@dataclass(frozen=True)
 class PortfolioState:
-    """Snapshot passed into allocators (S2+)."""
+    """Read-only snapshot of the portfolio at a given time."""
 
     positions: dict[str, float] = field(default_factory=dict)
     cash_weight: float = 1.0
     portfolio_value: float = 1.0
     peak_value: float = 1.0
     rolling_mdd: float = 0.0
+    position_mdds: dict[str, float] = field(default_factory=dict)
+    position_cum_rets: dict[str, float] = field(default_factory=dict)
+    position_peaks: dict[str, float] = field(default_factory=dict)
+    cooldown_days: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -40,6 +44,9 @@ class PortfolioAllocator(ABC):
         scores: dict[str, float],
         vols: dict[str, float],
         state: PortfolioState,
-        market_context: MarketContext | None = None,
+        market_context: MarketContext,
+        trends: dict[str, float] | None = None,
+        short_trends: dict[str, float] | None = None,
+        ma_distances: dict[int, dict[str, float]] | None = None,
     ) -> TargetPortfolio:
-        """Map alpha scores to target weights + cash."""
+        """Calculate target weights for the portfolio."""

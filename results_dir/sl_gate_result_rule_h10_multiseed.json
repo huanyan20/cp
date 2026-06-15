@@ -1,23 +1,121 @@
 {
-  "all_passed": true,
-  "results": {
-    "42": {
-      "can_promote": true,
-      "summary": "\u2713 Model cleared all 5 critical gates. Promoted to live trading eligible. (5/5 total gates passed)",
-      "overall_sortino": 1.3588390305712896,
-      "overall_mdd": 0.32454768941761286
-    },
-    "43": {
-      "can_promote": true,
-      "summary": "\u2713 Model cleared all 5 critical gates. Promoted to live trading eligible. (5/5 total gates passed)",
-      "overall_sortino": 1.27414618750044,
-      "overall_mdd": 0.33415183319161545
-    },
-    "44": {
-      "can_promote": true,
-      "summary": "\u2713 Model cleared all 5 critical gates. Promoted to live trading eligible. (5/5 total gates passed)",
-      "overall_sortino": 1.2066479259312162,
-      "overall_mdd": 0.3450687212877923
+  "strategy": "sl_rule",
+  "allocator": "rule",
+  "horizon": 10,
+  "metrics_path": null,
+  "promotion_gate": {
+    "can_promote": true,
+    "risk_level": "low",
+    "summary": "✓ Model cleared all 5 critical gates. Promoted to live trading eligible. (5/7 total gates passed)",
+    "gates": [
+      {
+        "name": "Sortino Stability",
+        "passed": true,
+        "message": "3 seeds, Sortino 0.85 +/- 0.16. Need 1 seeds and >= 0.8 Sortino.",
+        "details": {
+          "seeds": 3,
+          "sortino_mean": 0.8465801795673825,
+          "sortino_std": 0.1552110815720036,
+          "min_seeds": 1,
+          "threshold": 0.8
+        }
+      },
+      {
+        "name": "Drawdown Gate",
+        "passed": true,
+        "message": "Max drawdown 24.91% +/- 0.34% (worst case 25.25%). Limit: 30.0%.",
+        "details": {
+          "mdd_mean": 0.24909775108366305,
+          "mdd_std": 0.003397935582087129,
+          "worst_case": 0.2524956866657502,
+          "limit": 0.3
+        }
+      },
+      {
+        "name": "Cash Behavior",
+        "passed": true,
+        "message": "Cash: active cash. Acceptable.",
+        "details": {
+          "cash_mode": "enabled",
+          "behavior": "active cash",
+          "require_active": false
+        }
+      },
+      {
+        "name": "Turnover Gate",
+        "passed": true,
+        "message": "Turnover 7.26% +/- 0.11% (worst case 7.37%). Limit: 10.0%.",
+        "details": {
+          "turnover_mean": 0.0726136031213825,
+          "turnover_std": 0.0010866714490558862,
+          "worst_case": 0.07370027457043839,
+          "limit": 0.1
+        }
+      },
+      {
+        "name": "Period Consistency",
+        "passed": true,
+        "message": "Period returns median 1.9% +/- 21.9%. Worst period: -15.3%. Consistent performance.",
+        "details": {
+          "median_return": 0.01888878357952543,
+          "std_return": 0.21928020282299127,
+          "worst_period": -0.15263356548649717,
+          "num_periods": 5
+        }
+      },
+      {
+        "name": "Baseline Comparison",
+        "passed": false,
+        "message": "Model beats 0/3 baselines. Beaten: none.",
+        "details": {
+          "model_return": 0.2764965970102016,
+          "model_sharpe": 0.0,
+          "baselines_beaten": [],
+          "total_baselines": 3
+        }
+      },
+      {
+        "name": "Stress Testing",
+        "passed": false,
+        "message": "Passes 0/1 stress tests. Worst impact: 45.1%, Worst MDD: 41.4%. Limit: 30.0%.",
+        "details": {
+          "tests_survived": 0,
+          "total_tests": 1,
+          "worst_impact": 0.4510377268207316,
+          "worst_stress_mdd": 0.4136801153792319
+        }
+      }
+    ]
+  },
+  "summary": [
+    {
+      "algo": "sl_lightgbm",
+      "cash_mode": "enabled",
+      "variant": "sl_rule_h10",
+      "allocator": "rule",
+      "horizon": 10,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "sortino_mean": 0.8465801795673825,
+      "sortino_std": 0.1552110815720036,
+      "max_drawdown_mean": 0.24909775108366305,
+      "max_drawdown_std": 0.003397935582087129,
+      "total_return_mean": 0.2764965970102016,
+      "total_return_std": 0.049583092248954005,
+      "avg_cash_weight_mean": 0.7843326456780382,
+      "avg_cash_weight_std": 0.0026646820870638264,
+      "cash_weight_std_mean": 0.22411083228483472,
+      "cash_weight_std_std": 0.007770148317385903,
+      "cash_corr_next_return_mean": -0.07832738045727812,
+      "cash_corr_next_return_std": 0.009794142440182773,
+      "turnover_mean": 0.0726136031213825,
+      "turnover_std": 0.0010866714490558862,
+      "win_rate_mean": 0.3713615023474179,
+      "win_rate_std": 0.0036967173117426295,
+      "cash_behavior": "active cash"
     }
-  }
+  ]
 }

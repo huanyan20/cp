@@ -61,9 +61,12 @@ class RLAllocator(PortfolioAllocator):
         vols: dict[str, float],
         state: PortfolioState,
         market_context: MarketContext | None = None,
+        trends: dict[str, float] | None = None,
+        short_trends: dict[str, float] | None = None,
+        ma_distances: dict[int, dict[str, float]] | None = None,
     ) -> TargetPortfolio:
-        """Rule-only path (no RL action) — same as baseline allocator."""
-        return self.rule_allocator.allocate(scores, vols, state, market_context)
+        """Query RL policy for adjustments on top of the RuleBased target."""
+        return self.rule_allocator.allocate(scores, vols, state, market_context, trends, short_trends)
 
     def allocate_from_action(
         self,
@@ -75,9 +78,11 @@ class RLAllocator(PortfolioAllocator):
         *,
         market_context: MarketContext | None = None,
         enable_cash_action: bool = False,
+        trends: dict[str, float] | None = None,
+        short_trends: dict[str, float] | None = None,
+        ma_distances: dict[int, dict[str, float]] | None = None,
     ) -> TargetPortfolio:
         """Map env action logits to target weights on top of RuleBased baseline."""
-        baseline = self.rule_allocator.allocate(scores, vols, state, market_context)
         action = np.asarray(action, dtype=float).reshape(-1)
         stock_dim = len(tickers) + (1 if enable_cash_action else 0)
         if action.shape[0] < stock_dim:
@@ -89,10 +94,20 @@ class RLAllocator(PortfolioAllocator):
         if self.config.mode == "direct_topk":
             return self._direct_topk(stock_logits, cash_logit, tickers, enable_cash_action)
 
+        rule_target = self.rule_allocator.allocate(
+            scores, 
+            vols, 
+            state, 
+            market_context=MarketContext(), 
+            trends=trends,
+            short_trends=short_trends,
+            ma_distances=ma_distances,
+        )
+
         return self._residual_blend(
             stock_logits,
             cash_logit,
-            baseline,
+            rule_target,
             tickers,
             enable_cash_action,
         )

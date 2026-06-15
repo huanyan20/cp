@@ -17,9 +17,9 @@ Risk Level: **MEDIUM**
 - ✓ **Turnover Gate**: Turnover 1.99% +/- 0.00% (worst case 1.99%). Limit: 10.0%.
 - ✓ **Period Consistency**: Period returns median 9.6% +/- 47.7%. Worst period: -5.4%. Consistent performance.
 - ✗ **Baseline Comparison**: Model beats 0/3 baselines. Beaten: none.
-- ✓ **Stress Testing**: Passes 1/1 stress tests. Worst impact: 35.1% return reduction.
+- ✗ **Stress Testing**: Passes 0/1 stress tests. Worst impact: 136.7%, Worst MDD: 41.4%. Limit: 30.0%.
 
-**Summary**: ✗ Model blocked by 3 gate(s): Sortino Stability, Drawdown Gate, Baseline Comparison. Address failures before promotion. (4/7 total gates passed)
+**Summary**: ✗ Model blocked by 4 gate(s): Sortino Stability, Drawdown Gate, Baseline Comparison, Stress Testing. Address failures before promotion. (3/7 total gates passed)
 
 ## 1. Conclusions
 
@@ -113,14 +113,13 @@ No with_features overlay runs.
 
 > Isolated from RL main ranking. Run: `python -m sl_pipeline.walk_forward_sl --allocator rule --gate`.
 
-Best SL config: **sl_rule_h10** (Sortino 1.10, MDD 43.22%).
+Best SL config: **sl_rule_h10** (Sortino 0.85, MDD 24.91%).
 
 ### 8a. SL Summary
 
-| Strategy    | Horizon   |   Seeds | OOS Sortino    | Max Drawdown      | Total Return      | Turnover          | Cash Behavior   |
-|:------------|:----------|--------:|:---------------|:------------------|:------------------|:------------------|:----------------|
-| sl_rule_h10 | 10d       |       3 | 1.10 +/- 0.20  | 43.22% +/- 13.10% | 98.55% +/- 25.76% | 3.24% +/- 0.05%   | active cash     |
-| sl_rule_h5  | 5d        |       3 | -0.03 +/- 0.16 | 40.35% +/- 14.59% | -8.99% +/- 4.82%  | 16.39% +/- 11.18% | active cash     |
+| Strategy    | Horizon   |   Seeds | OOS Sortino   | Max Drawdown     | Total Return     | Turnover        | Cash Behavior   |
+|:------------|:----------|--------:|:--------------|:-----------------|:-----------------|:----------------|:----------------|
+| sl_rule_h10 | 10d       |       3 | 0.85 +/- 0.16 | 24.91% +/- 0.34% | 27.65% +/- 4.96% | 7.26% +/- 0.11% | active cash     |
 
 ### 8b. SL Period Breakdown
 
@@ -128,70 +127,55 @@ Best SL config: **sl_rule_h10** (Sortino 1.10, MDD 43.22%).
 
 |   Seed | Total Return   | Max Drawdown   |   Sortino | Turnover   | Avg Cash   |
 |-------:|:---------------|:---------------|----------:|:-----------|:-----------|
-|     42 | -28.66%        | 42.43%         |     -0.96 | 4.51%      | 2.60%      |
-|     43 | -14.33%        | 15.17%         |     -1.04 | 3.26%      | 83.64%     |
-|     44 | -15.63%        | 16.48%         |     -1    | 3.25%      | 81.35%     |
-|     42 | -15.23%        | 19.76%         |     -0.71 | 1.71%      | 65.08%     |
-|     43 | -21.12%        | 29.25%         |     -1.72 | 3.63%      | 42.93%     |
-|     44 | -22.79%        | 32.84%         |     -1.49 | 6.10%      | 26.33%     |
+|     42 | -13.63%        | 14.28%         |     -1.8  | 5.66%      | 88.11%     |
+|     43 | -16.20%        | 16.75%         |     -1.93 | 5.88%      | 88.30%     |
+|     44 | -15.96%        | 16.34%         |     -1.71 | 5.39%      | 88.31%     |
 
 ### 2024H2
 
 |   Seed | Total Return   | Max Drawdown   |   Sortino | Turnover   | Avg Cash   |
 |-------:|:---------------|:---------------|----------:|:-----------|:-----------|
-|     42 | -9.36%         | 26.96%         |     -0.41 | 1.01%      | 0.00%      |
-|     43 | -14.75%        | 19.72%         |     -1.38 | 4.25%      | 49.43%     |
-|     44 | -14.65%        | 19.75%         |     -1.46 | 4.19%      | 48.12%     |
-|     42 | 0.00%          | 0.00%          |      0    | 0.00%      | 100.00%    |
-|     43 | -16.48%        | 18.09%         |     -2.94 | 15.45%     | 47.75%     |
-|     44 | -14.81%        | 19.17%         |     -1.29 | 13.18%     | 48.68%     |
+|     42 | -7.18%         | 7.75%          |     -3.2  | 4.45%      | 88.93%     |
+|     43 | -7.67%         | 8.31%          |     -3.23 | 4.21%      | 88.02%     |
+|     44 | -7.85%         | 8.54%          |     -3.15 | 4.92%      | 88.45%     |
 
 ### 2025H1
 
 |   Seed | Total Return   | Max Drawdown   |   Sortino | Turnover   | Avg Cash   |
 |-------:|:---------------|:---------------|----------:|:-----------|:-----------|
-|     42 | 2.29%          | 43.22%         |      0.43 | 1.05%      | 0.00%      |
-|     43 | -8.07%         | 13.09%         |     -1.11 | 4.49%      | 74.88%     |
-|     44 | -8.17%         | 13.21%         |     -1.16 | 4.49%      | 76.29%     |
-|     42 | 0.00%          | 0.00%          |      0    | 0.00%      | 100.00%    |
-|     43 | -8.32%         | 25.32%         |     -0.9  | 15.95%     | 53.94%     |
-|     44 | -4.20%         | 27.31%         |     -0.28 | 28.06%     | 33.89%     |
+|     42 | 1.56%          | 6.03%          |      0.68 | 6.42%      | 85.31%     |
+|     43 | 3.61%          | 3.20%          |      1.54 | 6.21%      | 85.18%     |
+|     44 | 0.49%          | 3.41%          |      0.28 | 6.00%      | 86.77%     |
 
 ### 2025H2
 
 |   Seed | Total Return   | Max Drawdown   |   Sortino | Turnover   | Avg Cash   |
 |-------:|:---------------|:---------------|----------:|:-----------|:-----------|
-|     42 | 48.44%         | 10.00%         |      4.17 | 4.84%      | 18.56%     |
-|     43 | 46.88%         | 8.66%          |      4.01 | 1.59%      | 19.37%     |
-|     44 | 47.21%         | 10.76%         |      3.86 | 1.79%      | 16.39%     |
-|     42 | 0.00%          | 0.00%          |      0    | 0.00%      | 100.00%    |
-|     43 | 5.57%          | 12.74%         |      0.7  | 49.07%     | 3.16%      |
-|     44 | -4.15%         | 10.97%         |     -0.21 | 54.43%     | 5.82%      |
+|     42 | 18.13%         | 7.39%          |      2.96 | 11.22%     | 61.05%     |
+|     43 | 12.46%         | 7.23%          |      2.27 | 10.87%     | 62.96%     |
+|     44 | 10.00%         | 8.03%          |      1.9  | 11.18%     | 63.36%     |
 
 ### 2026H1
 
 |   Seed | Total Return   | Max Drawdown   |   Sortino | Turnover   | Avg Cash   |
 |-------:|:---------------|:---------------|----------:|:-----------|:-----------|
-|     42 | 65.28%         | 10.91%         |      6.14 | 3.76%      | 26.73%     |
-|     43 | 122.66%        | 14.21%         |      6.02 | 2.16%      | 0.00%      |
-|     44 | 119.68%        | 14.55%         |      5.57 | 2.46%      | 0.00%      |
-|     42 | 0.00%          | 0.00%          |      0    | 0.00%      | 100.00%    |
-|     43 | 51.35%         | 14.96%         |      3.18 | 59.03%     | 7.33%      |
-|     44 | 51.91%         | 17.04%         |      3.67 | 44.19%     | 14.36%     |
+|     42 | 39.30%         | 7.67%          |      5.32 | 11.18%     | 57.02%     |
+|     43 | 40.92%         | 10.53%         |      4.53 | 11.41%     | 52.45%     |
+|     44 | 42.39%         | 8.49%          |      4.98 | 10.10%     | 54.02%     |
 
 ### 8c. SL Promotion Gate
 
-**BLOCKED** (risk: MEDIUM)
+**ELIGIBLE** (risk: LOW)
 
-- ✓ **Sortino Stability**: 3 seeds, Sortino 1.10 +/- 0.20. Need 1 seeds and >= 0.8 Sortino.
-- ✗ **Drawdown Gate**: Max drawdown 43.22% +/- 13.10% (worst case 56.31%). Limit: 30.0%.
+- ✓ **Sortino Stability**: 3 seeds, Sortino 0.85 +/- 0.16. Need 1 seeds and >= 0.8 Sortino.
+- ✓ **Drawdown Gate**: Max drawdown 24.91% +/- 0.34% (worst case 25.25%). Limit: 30.0%.
 - ✓ **Cash Behavior**: Cash: active cash. Acceptable.
-- ✓ **Turnover Gate**: Turnover 3.24% +/- 0.05% (worst case 3.28%). Limit: 10.0%.
-- ✓ **Period Consistency**: Period returns median -4.7% +/- 51.9%. Worst period: -19.5%. Consistent performance.
+- ✓ **Turnover Gate**: Turnover 7.26% +/- 0.11% (worst case 7.37%). Limit: 10.0%.
+- ✓ **Period Consistency**: Period returns median 1.9% +/- 21.9%. Worst period: -15.3%. Consistent performance.
 - ✗ **Baseline Comparison**: Model beats 0/3 baselines. Beaten: none.
-- ✓ **Stress Testing**: Passes 1/1 stress tests. Worst impact: 14.4% return reduction.
+- ✗ **Stress Testing**: Passes 0/1 stress tests. Worst impact: 45.1%, Worst MDD: 41.4%. Limit: 30.0%.
 
-✗ Model blocked by 2 gate(s): Drawdown Gate, Baseline Comparison. Address failures before promotion. (5/7 total gates passed)
+✓ Model cleared all 5 critical gates. Promoted to live trading eligible. (5/7 total gates passed)
 
 ### 8d. SL vs RL Comparison (R6)
 
@@ -204,36 +188,36 @@ Best SL config: **sl_rule_h10** (Sortino 1.10, MDD 43.22%).
 
 | Metric       | SAC / cash=disabled / base   | SL sl_rule_h10   | Δ (SL−RL)   | Better   |
 |:-------------|:-----------------------------|:-----------------|:------------|:---------|
-| OOS Sortino  | 1.74                         | 1.10             | -0.64       | RL       |
-| Max Drawdown | 41.84%                       | 43.22%           | +1.38pp     | RL       |
-| Total Return | 119.29%                      | 98.55%           | -20.73pp    | RL       |
-| Turnover     | 1.99%                        | 3.24%            | +1.25pp     | RL       |
-| Avg Cash     | 0.00%                        | 37.47%           | +37.47pp    | —        |
-| Win Rate     | 56.59%                       | 42.25%           | -14.33pp    | RL       |
+| OOS Sortino  | 1.74                         | 0.85             | -0.89       | RL       |
+| Max Drawdown | 41.84%                       | 24.91%           | -16.93pp    | SL       |
+| Total Return | 119.29%                      | 27.65%           | -91.64pp    | RL       |
+| Turnover     | 1.99%                        | 7.26%            | +5.27pp     | RL       |
+| Avg Cash     | 0.00%                        | 78.43%           | +78.43pp    | —        |
+| Win Rate     | 56.59%                       | 37.14%           | -19.45pp    | RL       |
 
 #### Per-Period
 
 | Period   |   RL Sortino |   SL Sortino | Sortino   | RL MDD   | SL MDD   | MDD   | RL Return   | SL Return   | Return   |
 |:---------|-------------:|-------------:|:----------|:---------|:---------|:------|:------------|:------------|:---------|
-| 2024H2   |        -0.29 |        -1.25 | RL        | 20.85%   | 17.28%   | SL    | -5.41%      | -11.68%     | RL       |
-| 2025H1   |        -0.01 |        -0.5  | RL        | 38.47%   | 20.36%   | SL    | -4.23%      | -4.41%      | RL       |
-| 2025H2   |         3.04 |         2.09 | RL        | 9.04%    | 8.85%    | SL    | 23.34%      | 23.99%      | SL       |
-| 2026H1   |         6.15 |         4.1  | RL        | 12.39%   | 11.95%   | SL    | 96.27%      | 68.48%      | RL       |
+| 2024H2   |        -0.29 |        -3.19 | RL        | 20.85%   | 8.20%    | SL    | -5.41%      | -7.56%      | RL       |
+| 2025H1   |        -0.01 |         0.83 | SL        | 38.47%   | 4.21%    | SL    | -4.23%      | 1.89%       | SL       |
+| 2025H2   |         3.04 |         2.38 | RL        | 9.04%    | 7.55%    | SL    | 23.34%      | 13.53%      | RL       |
+| 2026H1   |         6.15 |         4.94 | RL        | 12.39%   | 8.89%    | SL    | 96.27%      | 40.87%      | RL       |
 
 #### Gate Status
 
 | Gate               | RL   | SL   |
 |:-------------------|:-----|:-----|
 | Sortino Stability  | FAIL | PASS |
-| Drawdown Gate      | FAIL | FAIL |
+| Drawdown Gate      | FAIL | PASS |
 | Cash Behavior      | PASS | PASS |
 | Turnover Gate      | PASS | PASS |
 | Period Consistency | PASS | PASS |
-| Overall            | FAIL | FAIL |
+| Overall            | FAIL | PASS |
 
 #### Verdict
 
-- Sortino: SL (1.10) is below 80% of RL (1.74); ratio=63%.
-- MDD: SL (43.22%) worse than RL (41.84%).
+- Sortino: SL (0.85) is below 80% of RL (1.74); ratio=49%.
+- MDD: SL (24.91%) beats RL (41.84%) — vol-target + tiered breaker working as intended.
 - Turnover: RL lower than SL.
-- Promotion: both SL and RL blocked — continue R6/SL iteration.
+- Promotion: SL clears Gate while RL is BLOCKED — prioritize SL as risk baseline.

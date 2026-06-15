@@ -61,6 +61,8 @@ def build_allocator(name: str) -> RuleBasedAllocator:
         RuleBasedAllocatorConfig(
             top_k=SETTINGS.research.default_topk,
             max_single_weight=SETTINGS.risk_limits.max_single_weight,
+            target_vol_annual=SETTINGS.research.sl_target_vol,
+            trailing_stop_threshold=SETTINGS.research.sl_trailing_stop,
         )
     )
 
@@ -290,6 +292,9 @@ def run_walk_forward_sl(
             cash_weight=backtest["final_cash_weight"],
             portfolio_value=backtest["final_portfolio_value"],
             peak_value=backtest["final_peak_value"],
+            position_cum_rets=backtest.get("final_position_cum_rets", {}),
+            position_peaks=backtest.get("final_position_peaks", {}),
+            cooldown_days=backtest.get("final_cooldown_days", {}),
         )
         period_metrics = metrics_from_backtest(
             backtest,
@@ -329,6 +334,8 @@ def run_walk_forward_sl(
     # --- LIQUIDITY STRESS TEST ---
     stress_state: PortfolioState | None = None
     stress_returns = []
+    promo_stress_state: PortfolioState | None = None
+    promo_stress_returns = []
     for p_data in period_cache:
         stress_bt = simulate_period(
             p_data["combined_test"],
@@ -347,6 +354,24 @@ def run_walk_forward_sl(
             peak_value=stress_bt["final_peak_value"],
         )
         stress_returns.extend(stress_bt["daily_returns"])
+
+        promo_bt = simulate_period(
+            p_data["combined_test"],
+            p_data["scores"],
+            allocator,
+            p_data["period_tickers"],
+            test_start=p_data["test_start"],
+            test_end=p_data["test_end"],
+            initial_state=promo_stress_state,
+            config=BacktestConfig(cost_multiplier=3.0)
+        )
+        promo_stress_state = PortfolioState(
+            positions=promo_bt["final_positions"],
+            cash_weight=promo_bt["final_cash_weight"],
+            portfolio_value=promo_bt["final_portfolio_value"],
+            peak_value=promo_bt["final_peak_value"],
+        )
+        promo_stress_returns.extend(promo_bt["daily_returns"])
         
     stress_cum = np.cumprod(1.0 + np.array(stress_returns))
     stress_hist = [1.0] + list(stress_cum)
@@ -359,12 +384,28 @@ def run_walk_forward_sl(
             dd = (peak - v) / peak
             if dd > stress_mdd:
                 stress_mdd = dd
+
+    promo_cum = np.cumprod(1.0 + np.array(promo_stress_returns))
+    promo_hist = [1.0] + list(promo_cum)
+    promo_mdd = 0.0
+    if len(promo_hist) > 0:
+        peak = promo_hist[0]
+        for v in promo_hist:
+            if v > peak:
+                peak = v
+            dd = (peak - v) / peak
+            if dd > promo_mdd:
+                promo_mdd = dd
                 
     stress_summary = {
         "tests": {
-            "limit_down_lock": {
+            "hard_disaster_stress": {
                 "total_return": stress_hist[-1] - 1.0,
                 "max_drawdown": stress_mdd
+            },
+            "promotion_stress": {
+                "total_return": promo_hist[-1] - 1.0,
+                "max_drawdown": promo_mdd
             }
         }
     }
@@ -402,7 +443,10 @@ def run_walk_forward_sl(
     }
 
     if run_gate:
-        gate_result, raw_summary, _ = run_sl_promotion_gate(path)
+        gate_result, raw_summary, _ = run_sl_promotion_gate(
+            path,
+            min_seeds=SETTINGS.research.promotion_min_seeds,
+        )
         gate_path = save_sl_gate_result(
             gate_result,
             raw_summary,
@@ -410,6 +454,7 @@ def run_walk_forward_sl(
             horizon=horizon,
             allocator=allocator_name,
             metrics_path=str(path),
+            seed=seed,
         )
         result["promotion_gate"] = {
             "can_promote": gate_result.can_promote,

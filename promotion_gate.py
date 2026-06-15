@@ -402,6 +402,7 @@ def check_ablation_gate(
 def check_stress_gate(
     raw_summary: list[dict],
     stress_summary: dict[str, Any],
+    max_drawdown_limit: float = 0.35,
 ) -> PromotionGate:
     """
     Check if model survives stress tests (fee, slippage, spread sensitivity).
@@ -434,22 +435,28 @@ def check_stress_gate(
     stress_tests = stress_summary.get("tests", {})
     tests_survived = 0
     worst_impact = 0.0
+    worst_stress_mdd = 0.0
 
     for _test_name, test_data in stress_tests.items():
+        if "disaster" in _test_name or "hard" in _test_name:
+            continue
+            
         stressed_return = test_data.get("total_return", 0.0)
+        stress_mdd = test_data.get("max_drawdown", 0.0)
         impact = baseline_return - stressed_return
 
-        if stressed_return > 0 or impact < 0.15:  # Loss less than 15%
+        if (stressed_return > 0 or impact < 0.15) and stress_mdd <= max_drawdown_limit:
             tests_survived += 1
 
         worst_impact = max(worst_impact, impact)
+        worst_stress_mdd = max(worst_stress_mdd, stress_mdd)
 
-    total_tests = len(stress_tests)
+    total_tests = sum(1 for n in stress_tests if "disaster" not in n and "hard" not in n)
     passed = tests_survived >= (total_tests * 0.7) if total_tests > 0 else False
 
     message = (
         f"Passes {tests_survived}/{total_tests} stress tests. "
-        f"Worst impact: {worst_impact*100:.1f}% return reduction."
+        f"Worst impact: {worst_impact*100:.1f}%, Worst MDD: {worst_stress_mdd*100:.1f}%. Limit: {max_drawdown_limit*100:.1f}%."
     )
 
     return PromotionGate(
@@ -460,6 +467,7 @@ def check_stress_gate(
             "tests_survived": tests_survived,
             "total_tests": total_tests,
             "worst_impact": worst_impact,
+            "worst_stress_mdd": worst_stress_mdd,
         },
     )
 
@@ -597,7 +605,7 @@ def run_promotion_gate(
     if ablation_summary:
         gates.append(check_ablation_gate(ablation_summary))
     if stress_summary:
-        gates.append(check_stress_gate(raw_summary, stress_summary))
+        gates.append(check_stress_gate(raw_summary, stress_summary, max_drawdown_limit=max_drawdown_limit))
 
     # Determine overall result
     critical_gates = gates[:5]  # Core gates

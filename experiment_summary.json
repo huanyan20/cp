@@ -153,9 +153,13 @@
     "ablations": {},
     "stress_tests": {
         "tests": {
-            "limit_down_lock": {
-                "total_return": 0.8418267318548112,
-                "max_drawdown": 0.5181716526785997
+            "hard_disaster_stress": {
+                "total_return": -0.7521149933611191,
+                "max_drawdown": 0.8574015483912103
+            },
+            "promotion_stress": {
+                "total_return": -0.17454112981053005,
+                "max_drawdown": 0.4136801153792319
             }
         }
     },
@@ -171,7 +175,7 @@
     "promotion_gate": {
         "can_promote": false,
         "risk_level": "medium",
-        "summary": "✗ Model blocked by 3 gate(s): Sortino Stability, Drawdown Gate, Baseline Comparison. Address failures before promotion. (4/7 total gates passed)",
+        "summary": "✗ Model blocked by 4 gate(s): Sortino Stability, Drawdown Gate, Baseline Comparison, Stress Testing. Address failures before promotion. (3/7 total gates passed)",
         "gates": [
             {
                 "name": "Sortino Stability",
@@ -241,12 +245,13 @@
             },
             {
                 "name": "Stress Testing",
-                "passed": true,
-                "message": "Passes 1/1 stress tests. Worst impact: 35.1% return reduction.",
+                "passed": false,
+                "message": "Passes 0/1 stress tests. Worst impact: 136.7%, Worst MDD: 41.4%. Limit: 30.0%.",
                 "details": {
-                    "tests_survived": 1,
+                    "tests_survived": 0,
                     "total_tests": 1,
-                    "worst_impact": 0.3510371692902128
+                    "worst_impact": 1.3674050309555539,
+                    "worst_stress_mdd": 0.4136801153792319
                 }
             }
         ]
@@ -264,51 +269,22 @@
                     43,
                     44
                 ],
-                "sortino_mean": 1.0999110223932353,
-                "sortino_std": 0.20057913043282596,
-                "max_drawdown_mean": 0.4321628910499493,
-                "max_drawdown_std": 0.1309650171629849,
-                "total_return_mean": 0.9855364579638843,
-                "total_return_std": 0.2576107762963159,
-                "avg_cash_weight_mean": 0.374690583283239,
-                "avg_cash_weight_std": 0.20806028930454132,
-                "cash_weight_std_mean": 0.3309934658952116,
-                "cash_weight_std_std": 0.11007207593141383,
-                "cash_corr_next_return_mean": -0.05352318198465128,
-                "cash_corr_next_return_std": 0.05225140595737228,
-                "turnover_mean": 0.03237405884255792,
-                "turnover_std": 0.0004695435807294295,
-                "win_rate_mean": 0.4225352112676057,
-                "win_rate_std": 0.08465558150528149,
-                "cash_behavior": "active cash"
-            },
-            {
-                "algo": "sl_lightgbm",
-                "cash_mode": "enabled",
-                "variant": "sl_rule_h5",
-                "allocator": "rule",
-                "horizon": 5,
-                "seeds": [
-                    42,
-                    43,
-                    44
-                ],
-                "sortino_mean": -0.028184324113258826,
-                "sortino_std": 0.15542906414065832,
-                "max_drawdown_mean": 0.403486772802313,
-                "max_drawdown_std": 0.14593084121480493,
-                "total_return_mean": -0.08990175351305614,
-                "total_return_std": 0.048211752560803366,
-                "avg_cash_weight_mean": 0.4913483899523894,
-                "avg_cash_weight_std": 0.27608418522144357,
-                "cash_weight_std_mean": 0.25969137251407814,
-                "cash_weight_std_std": 0.02810335844455258,
-                "cash_corr_next_return_mean": 0.02222044994828976,
-                "cash_corr_next_return_std": 0.02716352929090472,
-                "turnover_mean": 0.16388969561037695,
-                "turnover_std": 0.11182423345298151,
-                "win_rate_mean": 0.3741784037558686,
-                "win_rate_std": 0.20996258387492,
+                "sortino_mean": 0.8465801795673825,
+                "sortino_std": 0.1552110815720036,
+                "max_drawdown_mean": 0.24909775108366305,
+                "max_drawdown_std": 0.003397935582087129,
+                "total_return_mean": 0.2764965970102016,
+                "total_return_std": 0.049583092248954005,
+                "avg_cash_weight_mean": 0.7843326456780382,
+                "avg_cash_weight_std": 0.0026646820870638264,
+                "cash_weight_std_mean": 0.22411083228483472,
+                "cash_weight_std_std": 0.007770148317385903,
+                "cash_corr_next_return_mean": -0.07832738045727812,
+                "cash_corr_next_return_std": 0.009794142440182773,
+                "turnover_mean": 0.0726136031213825,
+                "turnover_std": 0.0010866714490558862,
+                "win_rate_mean": 0.3713615023474179,
+                "win_rate_std": 0.0036967173117426295,
                 "cash_behavior": "active cash"
             }
         ],
@@ -321,30 +297,30 @@
             "results_dir\\metrics_sl_rule_h5_seed44.json"
         ],
         "promotion_gate": {
-            "can_promote": false,
-            "risk_level": "medium",
-            "summary": "✗ Model blocked by 2 gate(s): Drawdown Gate, Baseline Comparison. Address failures before promotion. (5/7 total gates passed)",
+            "can_promote": true,
+            "risk_level": "low",
+            "summary": "✓ Model cleared all 5 critical gates. Promoted to live trading eligible. (5/7 total gates passed)",
             "gates": [
                 {
                     "name": "Sortino Stability",
                     "passed": true,
-                    "message": "3 seeds, Sortino 1.10 +/- 0.20. Need 1 seeds and >= 0.8 Sortino.",
+                    "message": "3 seeds, Sortino 0.85 +/- 0.16. Need 1 seeds and >= 0.8 Sortino.",
                     "details": {
                         "seeds": 3,
-                        "sortino_mean": 1.0999110223932353,
-                        "sortino_std": 0.20057913043282596,
+                        "sortino_mean": 0.8465801795673825,
+                        "sortino_std": 0.1552110815720036,
                         "min_seeds": 1,
                         "threshold": 0.8
                     }
                 },
                 {
                     "name": "Drawdown Gate",
-                    "passed": false,
-                    "message": "Max drawdown 43.22% +/- 13.10% (worst case 56.31%). Limit: 30.0%.",
+                    "passed": true,
+                    "message": "Max drawdown 24.91% +/- 0.34% (worst case 25.25%). Limit: 30.0%.",
                     "details": {
-                        "mdd_mean": 0.4321628910499493,
-                        "mdd_std": 0.1309650171629849,
-                        "worst_case": 0.5631279082129342,
+                        "mdd_mean": 0.24909775108366305,
+                        "mdd_std": 0.003397935582087129,
+                        "worst_case": 0.2524956866657502,
                         "limit": 0.3
                     }
                 },
@@ -361,22 +337,22 @@
                 {
                     "name": "Turnover Gate",
                     "passed": true,
-                    "message": "Turnover 3.24% +/- 0.05% (worst case 3.28%). Limit: 10.0%.",
+                    "message": "Turnover 7.26% +/- 0.11% (worst case 7.37%). Limit: 10.0%.",
                     "details": {
-                        "turnover_mean": 0.03237405884255792,
-                        "turnover_std": 0.0004695435807294295,
-                        "worst_case": 0.032843602423287356,
+                        "turnover_mean": 0.0726136031213825,
+                        "turnover_std": 0.0010866714490558862,
+                        "worst_case": 0.07370027457043839,
                         "limit": 0.1
                     }
                 },
                 {
                     "name": "Period Consistency",
                     "passed": true,
-                    "message": "Period returns median -4.7% +/- 51.9%. Worst period: -19.5%. Consistent performance.",
+                    "message": "Period returns median 1.9% +/- 21.9%. Worst period: -15.3%. Consistent performance.",
                     "details": {
-                        "median_return": -0.046530531801144005,
-                        "std_return": 0.5194130945901461,
-                        "worst_period": -0.1954261333756121,
+                        "median_return": 0.01888878357952543,
+                        "std_return": 0.21928020282299127,
+                        "worst_period": -0.15263356548649717,
                         "num_periods": 5
                     }
                 },
@@ -385,7 +361,7 @@
                     "passed": false,
                     "message": "Model beats 0/3 baselines. Beaten: none.",
                     "details": {
-                        "model_return": 0.9855364579638843,
+                        "model_return": 0.2764965970102016,
                         "model_sharpe": 0.0,
                         "baselines_beaten": [],
                         "total_baselines": 3
@@ -393,12 +369,13 @@
                 },
                 {
                     "name": "Stress Testing",
-                    "passed": true,
-                    "message": "Passes 1/1 stress tests. Worst impact: 14.4% return reduction.",
+                    "passed": false,
+                    "message": "Passes 0/1 stress tests. Worst impact: 45.1%, Worst MDD: 41.4%. Limit: 30.0%.",
                     "details": {
-                        "tests_survived": 1,
+                        "tests_survived": 0,
                         "total_tests": 1,
-                        "worst_impact": 0.14370972610907318
+                        "worst_impact": 0.4510377268207316,
+                        "worst_stress_mdd": 0.4136801153792319
                     }
                 }
             ]
@@ -430,11 +407,11 @@
                 "metric": "sortino",
                 "label": "OOS Sortino",
                 "rl_value": 1.7367860012076695,
-                "sl_value": 1.0999110223932353,
+                "sl_value": 0.8465801795673825,
                 "rl_display": "1.74",
-                "sl_display": "1.10",
-                "delta": -0.6368749788144341,
-                "delta_display": "-0.64",
+                "sl_display": "0.85",
+                "delta": -0.8902058216402869,
+                "delta_display": "-0.89",
                 "winner": "RL",
                 "better": "higher"
             },
@@ -442,23 +419,23 @@
                 "metric": "max_drawdown",
                 "label": "Max Drawdown",
                 "rl_value": 0.41837971177165745,
-                "sl_value": 0.4321628910499493,
+                "sl_value": 0.24909775108366305,
                 "rl_display": "41.84%",
-                "sl_display": "43.22%",
-                "delta": 0.013783179278291868,
-                "delta_display": "+1.38pp",
-                "winner": "RL",
+                "sl_display": "24.91%",
+                "delta": -0.1692819606879944,
+                "delta_display": "-16.93pp",
+                "winner": "SL",
                 "better": "lower"
             },
             {
                 "metric": "total_return",
                 "label": "Total Return",
                 "rl_value": 1.192863901145024,
-                "sl_value": 0.9855364579638843,
+                "sl_value": 0.2764965970102016,
                 "rl_display": "119.29%",
-                "sl_display": "98.55%",
-                "delta": -0.2073274431811396,
-                "delta_display": "-20.73pp",
+                "sl_display": "27.65%",
+                "delta": -0.9163673041348224,
+                "delta_display": "-91.64pp",
                 "winner": "RL",
                 "better": "higher"
             },
@@ -466,11 +443,11 @@
                 "metric": "turnover",
                 "label": "Turnover",
                 "rl_value": 0.01987041053452708,
-                "sl_value": 0.03237405884255792,
+                "sl_value": 0.0726136031213825,
                 "rl_display": "1.99%",
-                "sl_display": "3.24%",
-                "delta": 0.012503648308030843,
-                "delta_display": "+1.25pp",
+                "sl_display": "7.26%",
+                "delta": 0.05274319258685542,
+                "delta_display": "+5.27pp",
                 "winner": "RL",
                 "better": "lower"
             },
@@ -478,11 +455,11 @@
                 "metric": "avg_cash_weight",
                 "label": "Avg Cash",
                 "rl_value": 0.0,
-                "sl_value": 0.374690583283239,
+                "sl_value": 0.7843326456780382,
                 "rl_display": "0.00%",
-                "sl_display": "37.47%",
-                "delta": 0.374690583283239,
-                "delta_display": "+37.47pp",
+                "sl_display": "78.43%",
+                "delta": 0.7843326456780382,
+                "delta_display": "+78.43pp",
                 "winner": "—",
                 "better": "neutral"
             },
@@ -490,11 +467,11 @@
                 "metric": "win_rate",
                 "label": "Win Rate",
                 "rl_value": 0.5658747300215983,
-                "sl_value": 0.4225352112676057,
+                "sl_value": 0.3713615023474179,
                 "rl_display": "56.59%",
-                "sl_display": "42.25%",
-                "delta": -0.1433395187539926,
-                "delta_display": "-14.33pp",
+                "sl_display": "37.14%",
+                "delta": -0.1945132276741804,
+                "delta_display": "-19.45pp",
                 "winner": "RL",
                 "better": "higher"
             }
@@ -503,61 +480,61 @@
             {
                 "period": "2024H2",
                 "rl_sortino": -0.286340521385648,
-                "sl_sortino": -1.245428792666823,
+                "sl_sortino": -3.1927626916281118,
                 "sortino_winner": "RL",
                 "rl_max_drawdown": 0.20850075682184604,
-                "sl_max_drawdown": 0.17281392440907214,
+                "sl_max_drawdown": 0.08198119474849129,
                 "max_drawdown_winner": "SL",
                 "rl_total_return": -0.05414597658114406,
-                "sl_total_return": -0.11675503821253606,
+                "sl_total_return": -0.07564892508106418,
                 "total_return_winner": "RL",
                 "rl_turnover": 0.008130081300813009,
-                "sl_turnover": 0.0634787627686844,
+                "sl_turnover": 0.04529586321042193,
                 "turnover_winner": "RL"
             },
             {
                 "period": "2025H1",
                 "rl_sortino": -0.011115570638222026,
-                "sl_sortino": -0.501695746730468,
-                "sortino_winner": "RL",
+                "sl_sortino": 0.8344034734589035,
+                "sortino_winner": "SL",
                 "rl_max_drawdown": 0.3847458562325546,
-                "sl_max_drawdown": 0.20359114137754872,
+                "sl_max_drawdown": 0.0421275683088616,
                 "max_drawdown_winner": "SL",
                 "rl_total_return": -0.04232821333138048,
-                "sl_total_return": -0.04412827226759778,
-                "total_return_winner": "RL",
+                "sl_total_return": 0.01888878357952543,
+                "total_return_winner": "SL",
                 "rl_turnover": 0.04385964964565478,
-                "sl_turnover": 0.09005917531959706,
+                "sl_turnover": 0.06207350645472622,
                 "turnover_winner": "RL"
             },
             {
                 "period": "2025H2",
                 "rl_sortino": 3.039375861404838,
-                "sl_sortino": 2.0883629944025315,
+                "sl_sortino": 2.377428469673631,
                 "sortino_winner": "RL",
                 "rl_max_drawdown": 0.09041375536003007,
-                "sl_max_drawdown": 0.08854801032086941,
+                "sl_max_drawdown": 0.07552486088302672,
                 "max_drawdown_winner": "SL",
                 "rl_total_return": 0.23340576588184292,
-                "sl_total_return": 0.23992241084082563,
-                "total_return_winner": "SL",
+                "sl_total_return": 0.1353416862186009,
+                "total_return_winner": "RL",
                 "rl_turnover": 0.008064516129032258,
-                "sl_turnover": 0.18620118182127568,
+                "sl_turnover": 0.11090104676594344,
                 "turnover_winner": "RL"
             },
             {
                 "period": "2026H1",
                 "rl_sortino": 6.153589895611864,
-                "sl_sortino": 4.096425747239209,
+                "sl_sortino": 4.9434918906632435,
                 "sortino_winner": "RL",
                 "rl_max_drawdown": 0.1239067922280741,
-                "sl_max_drawdown": 0.11945989878318775,
+                "sl_max_drawdown": 0.08894722198551323,
                 "max_drawdown_winner": "SL",
                 "rl_total_return": 0.9627495896993543,
-                "sl_total_return": 0.6847926524373888,
+                "sl_total_return": 0.40870507654799826,
                 "total_return_winner": "RL",
                 "rl_turnover": 0.02156862762628817,
-                "sl_turnover": 0.1859912060603155,
+                "sl_turnover": 0.10895698501707753,
                 "turnover_winner": "RL"
             }
         ],
@@ -567,14 +544,14 @@
                 "rl_passed": false,
                 "sl_passed": true,
                 "rl_message": "1 seeds, Sortino 1.74 +/- 0.00. Need 3 seeds and >= 0.8 Sortino.",
-                "sl_message": "3 seeds, Sortino 1.10 +/- 0.20. Need 1 seeds and >= 0.8 Sortino."
+                "sl_message": "3 seeds, Sortino 0.85 +/- 0.16. Need 1 seeds and >= 0.8 Sortino."
             },
             {
                 "gate": "Drawdown Gate",
                 "rl_passed": false,
-                "sl_passed": false,
+                "sl_passed": true,
                 "rl_message": "Max drawdown 41.84% +/- 0.00% (worst case 41.84%). Limit: 30.0%.",
-                "sl_message": "Max drawdown 43.22% +/- 13.10% (worst case 56.31%). Limit: 30.0%."
+                "sl_message": "Max drawdown 24.91% +/- 0.34% (worst case 25.25%). Limit: 30.0%."
             },
             {
                 "gate": "Cash Behavior",
@@ -588,30 +565,30 @@
                 "rl_passed": true,
                 "sl_passed": true,
                 "rl_message": "Turnover 1.99% +/- 0.00% (worst case 1.99%). Limit: 10.0%.",
-                "sl_message": "Turnover 3.24% +/- 0.05% (worst case 3.28%). Limit: 10.0%."
+                "sl_message": "Turnover 7.26% +/- 0.11% (worst case 7.37%). Limit: 10.0%."
             },
             {
                 "gate": "Period Consistency",
                 "rl_passed": true,
                 "sl_passed": true,
                 "rl_message": "Period returns median 9.6% +/- 47.7%. Worst period: -5.4%. Consistent performance.",
-                "sl_message": "Period returns median -4.7% +/- 51.9%. Worst period: -19.5%. Consistent performance."
+                "sl_message": "Period returns median 1.9% +/- 21.9%. Worst period: -15.3%. Consistent performance."
             },
             {
                 "gate": "Overall",
                 "rl_passed": false,
-                "sl_passed": false,
-                "rl_message": "✗ Model blocked by 3 gate(s): Sortino Stability, Drawdown Gate, Baseline Comparison. Address failures before promotion. (4/7 total gates passed)",
-                "sl_message": "✗ Model blocked by 2 gate(s): Drawdown Gate, Baseline Comparison. Address failures before promotion. (5/7 total gates passed)"
+                "sl_passed": true,
+                "rl_message": "✗ Model blocked by 4 gate(s): Sortino Stability, Drawdown Gate, Baseline Comparison, Stress Testing. Address failures before promotion. (3/7 total gates passed)",
+                "sl_message": "✓ Model cleared all 5 critical gates. Promoted to live trading eligible. (5/7 total gates passed)"
             }
         ],
         "verdict": [
-            "Sortino: SL (1.10) is below 80% of RL (1.74); ratio=63%.",
-            "MDD: SL (43.22%) worse than RL (41.84%).",
+            "Sortino: SL (0.85) is below 80% of RL (1.74); ratio=49%.",
+            "MDD: SL (24.91%) beats RL (41.84%) — vol-target + tiered breaker working as intended.",
             "Turnover: RL lower than SL.",
-            "Promotion: both SL and RL blocked — continue R6/SL iteration."
+            "Promotion: SL clears Gate while RL is BLOCKED — prioritize SL as risk baseline."
         ],
         "rl_gate_approved": false,
-        "sl_gate_approved": false
+        "sl_gate_approved": true
     }
 }

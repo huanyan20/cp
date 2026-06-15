@@ -28,7 +28,7 @@ Before enabling live trading:
 | Area | Status |
 |---|---|
 | SAC | Not promotable; research-only. |
-| SL | **APPROVED**: h10 cleared all 5 critical gates. Proceed to live dry-run. |
+| SL | **BLOCKED**: h10 circuit-breaker behavior under repair. |
 | Live | Ready for `trade_guard` dry-run phase. |
 | RPA | Use only after successful dry-run validation. |
 

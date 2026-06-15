@@ -34,10 +34,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("EvaluateSLLive")
 SETTINGS = load_settings()
 
-def get_current_positions_and_mdd(aid: str | None) -> tuple[dict[str, float], float]:
+def get_current_positions_and_mdd(aid: str | None) -> tuple[dict[str, float], float, float]:
     """Fetch current positions from CMoney and calculate live MDD."""
     if not HAS_RPA or not aid:
-        return {}, 0.0
+        return {}, 0.0, 0.0
     try:
         rpa = CMoneyRPA(aid=aid)
         status = rpa.get_account_status()
@@ -55,26 +55,22 @@ def get_current_positions_and_mdd(aid: str | None) -> tuple[dict[str, float], fl
                     history = json.loads(equity_file.read_text(encoding="utf-8"))
                 except json.JSONDecodeError:
                     pass
-            peak_equity = max(list(history.values()) + [total_assets]) if history else total_assets
+            recent_hist_vals = list(history.values())[-126:] if history else []
+            peak_equity = max(recent_hist_vals + [total_assets])
             if peak_equity > 0:
                 mdd = (peak_equity - total_assets) / peak_equity
 
         if total_assets <= 0:
-            return {}, 0.0
+            return {}, 0.0, 0.0
             
-        positions = {}
+        inventory_qty = {}
         for ticker, qty in inventory.items():
-            # Estimate weight using last known price, or just a rough approximation
-            # Since CMoney RPA doesn't return exact PV per position directly in this dict,
-            # this is a limitation. But typically RPA inventory includes MarketValue if fetched deeply.
-            # For hysteresis, just having > 1e-4 weight is enough to trigger the keep logic.
-            # We'll assign a nominal weight to signify it's held.
             if qty > 0:
-                positions[ticker] = 0.05  # Nominal weight to trigger hysteresis
-        return positions, mdd
+                inventory_qty[ticker] = float(qty)
+        return inventory_qty, mdd, total_assets
     except Exception as e:
         logger.warning(f"Could not fetch current positions or MDD: {e}")
-        return {}, 0.0
+        return {}, 0.0, 0.0
 
 def main():
     parser = argparse.ArgumentParser(description="Live Signal Generator for SL LightGBM h10")
@@ -161,8 +157,17 @@ def main():
     )
 
     # Get current positions for hysteresis and calculate MDD
-    current_positions, current_mdd = get_current_positions_and_mdd(args.aid)
+    inventory_qty, current_mdd, total_assets = get_current_positions_and_mdd(args.aid)
     logger.info(f"Current live MDD calculated as: {current_mdd*100:.2f}%")
+    
+    current_positions = {}
+    if total_assets > 0:
+        for ticker, qty in inventory_qty.items():
+            if ticker in data and not data[ticker].empty:
+                latest_close = float(data[ticker]["close"].iloc[-1])
+                weight = (qty * latest_close) / total_assets
+                current_positions[ticker] = weight
+
     state = PortfolioState(
         positions=current_positions,
         cash_weight=max(0.0, 1.0 - sum(current_positions.values())),

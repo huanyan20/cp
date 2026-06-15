@@ -167,6 +167,7 @@ def run_sl_promotion_gate(
     max_drawdown_limit: float | None = None,
     turnover_limit: float | None = None,
     baseline_summary: dict[str, Any] | None = None,
+    target_horizon: int | None = None,
 ) -> tuple[PromotionResult, list[dict], pd.DataFrame]:
     """Run promotion gate on SL metrics (no RL baseline/ablation/stress gates)."""
     sortino_threshold = (
@@ -212,6 +213,9 @@ def run_sl_promotion_gate(
     else:
         records = read_sl_metric_files(results_dir or SETTINGS.paths.results_dir)
 
+    if target_horizon is not None:
+        records = [r for r in records if r.get("horizon") == target_horizon]
+
     if baseline_summary is None:
         try:
             baseline_path = Path(results_dir or SETTINGS.paths.results_dir) / "baseline_summary.json"
@@ -254,8 +258,10 @@ def sl_gate_result_path(
     *,
     horizon: int,
     allocator: str = "rule",
+    seed: int | None = None,
 ) -> Path:
-    return results_dir / f"sl_gate_result_{allocator}_h{horizon}.json"
+    suffix = f"_seed{seed}" if seed is not None else "_multiseed"
+    return results_dir / f"sl_gate_result_{allocator}_h{horizon}{suffix}.json"
 
 
 def save_sl_gate_result(
@@ -266,6 +272,7 @@ def save_sl_gate_result(
     horizon: int,
     allocator: str = "rule",
     metrics_path: str | None = None,
+    seed: int | None = None,
 ) -> Path:
     """Persist SL gate outcome for experiment_report / audit."""
     payload = {
@@ -276,7 +283,7 @@ def save_sl_gate_result(
         "promotion_gate": promotion_result_to_dict(result),
         "summary": raw_summary,
     }
-    path = sl_gate_result_path(results_dir, horizon=horizon, allocator=allocator)
+    path = sl_gate_result_path(results_dir, horizon=horizon, allocator=allocator, seed=seed)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return path

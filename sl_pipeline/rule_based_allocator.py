@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -22,13 +22,22 @@ class RuleBasedAllocatorConfig:
     enable_vol_target: bool = True
     target_vol_annual: float = 0.15
     vol_floor: float = 0.05
-    weighting_method: str = "inv_vol"  # 'inv_vol' or 'equal'
+    enable_trend_filter: bool = True
+    weighting_method: str = "abs_vol_parity"  # 'inv_vol', 'equal', or 'abs_vol_parity'
     yellow_mdd: float = 0.20
     yellow_max_exposure: float = 0.50
     red_mdd: float = 0.35
     red_max_exposure: float = 0.0
     max_single_weight: float = 0.35
     min_score: float = 1e-4
+    enable_momentum_scaling: bool = False
+    momentum_scale_factor: float = 5.0
+
+    enable_trailing_stop: bool = True
+    trailing_stop_threshold: float = 0.15
+    cooldown_duration: int = 10
+    enable_ma_filter: bool = True
+    ma_filter_windows: list[int] = field(default_factory=lambda: [20])
 
 
 class RuleBasedAllocator(PortfolioAllocator):
@@ -43,16 +52,21 @@ class RuleBasedAllocator(PortfolioAllocator):
         vols: dict[str, float],
         state: PortfolioState,
         market_context: MarketContext | None = None,
+        trends: dict[str, float] | None = None,
+        short_trends: dict[str, float] | None = None,
+        ma_distances: dict[int, dict[str, float]] | None = None,
     ) -> TargetPortfolio:
+        """Allocate based on rules + Abs Vol Parity."""
         cfg = self.config
         if not scores:
             return TargetPortfolio(target_weights={}, cash_weight=1.0)
 
-        ranked = sorted(
-            scores,
-            key=lambda ticker: scores[ticker],
+        sorted_scores = sorted(
+            scores.items(),
+            key=lambda item: item[1],
             reverse=True,
         )
+        ranked = [t for t, s in sorted_scores]
         top_k = ranked[: cfg.top_k]
         top_hysteresis = set(ranked[: cfg.hysteresis_rank])
 
@@ -61,17 +75,48 @@ class RuleBasedAllocator(PortfolioAllocator):
             if weight > 1e-4 and ticker in top_hysteresis:
                 selected.add(ticker)
 
-        selected_sorted = sorted(
-            [t for t in selected if scores.get(t, -np.inf) > cfg.min_score],
-            key=lambda ticker: scores.get(ticker, -np.inf),
-            reverse=True,
-        )
+        # Filter available names
+        valid_tickers = []
+        for t, score in sorted_scores:
+            if t not in selected:
+                continue
+            if score < cfg.min_score:
+                continue
+
+            if self.config.enable_trend_filter and trends is not None:
+                if trends.get(t, 1.0) < 0.0:
+                    continue  # Filter out downward trend stocks
+
+            if self.config.enable_ma_filter and ma_distances is not None:
+                passed_ma = True
+                for w in self.config.ma_filter_windows:
+                    if ma_distances.get(w, {}).get(t, 1.0) < 0.0:
+                        passed_ma = False
+                        break
+                if not passed_ma:
+                    continue
+
+            if self.config.enable_trailing_stop:
+                if state.position_mdds.get(t, 0.0) >= self.config.trailing_stop_threshold:
+                    continue
+
+            if state.cooldown_days.get(t, 0) > 0:
+                continue
+
+            valid_tickers.append(t)
+
+        selected_sorted = valid_tickers
 
         raw_weights: dict[str, float] = {}
         if cfg.weighting_method == "equal":
             n_selected = len(selected_sorted)
             if n_selected > 0:
                 raw_weights = {ticker: 1.0 / n_selected for ticker in selected_sorted}
+        elif cfg.weighting_method == "abs_vol_parity":
+            for ticker in selected_sorted:
+                vol = max(float(vols.get(ticker, cfg.vol_floor)), cfg.vol_floor)
+                # target_weight = (Target_Vol / sqrt(K)) / Asset_Vol
+                raw_weights[ticker] = (cfg.target_vol_annual / np.sqrt(cfg.top_k)) / vol
         else:
             inv_vol: dict[str, float] = {}
             for ticker in selected_sorted:
@@ -85,11 +130,20 @@ class RuleBasedAllocator(PortfolioAllocator):
         if not raw_weights:
             return TargetPortfolio(target_weights={}, cash_weight=1.0)
 
+        # Apply momentum scaling before renormalization / final sizing
+        if cfg.enable_momentum_scaling and short_trends:
+            for ticker in list(raw_weights.keys()):
+                st = short_trends.get(ticker, 0.0)
+                if st < 0.0:
+                    scaler = max(0.0, 1.0 + st * cfg.momentum_scale_factor)
+                    raw_weights[ticker] *= scaler
+
         raw_weights = self._cap_single_names(raw_weights, cfg.max_single_weight)
-        raw_weights = self._renormalize(raw_weights)
+        if cfg.weighting_method != "abs_vol_parity":
+            raw_weights = self._renormalize(raw_weights)
 
         exposure = 1.0
-        if cfg.enable_vol_target:
+        if cfg.enable_vol_target and cfg.weighting_method != "abs_vol_parity":
             portfolio_vol = self._estimate_portfolio_vol(raw_weights, vols, cfg.vol_floor)
             exposure = min(1.0, cfg.target_vol_annual / max(portfolio_vol, cfg.vol_floor))
             
