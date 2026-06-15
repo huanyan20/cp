@@ -75,17 +75,25 @@ def build_ma_distance_as_of(
 ) -> dict[str, float]:
     """Calculate the relative distance of the current price to the moving average."""
     distances: dict[str, float] = {}
+    first_ticker = list(enriched.keys())[0] if enriched else None
+    
     for ticker in tickers:
-        if ticker not in enriched:
+        if ticker in enriched:
+            df = enriched[ticker]
+            ret_col = "log_return"
+        elif first_ticker and f"macro_{ticker}_log_return" in enriched[first_ticker].columns:
+            df = enriched[first_ticker]
+            ret_col = f"macro_{ticker}_log_return"
+        else:
             distances[ticker] = 0.0
             continue
-        df = enriched[ticker]
+            
         idx = df.index.searchsorted(date, side="right") - 1
         if idx < 0:
             distances[ticker] = 0.0
             continue
         start_idx = max(0, idx - window + 1)
-        hist_ret = pd.to_numeric(df["log_return"].iloc[start_idx : idx + 1], errors="coerce").dropna()
+        hist_ret = pd.to_numeric(df[ret_col].iloc[start_idx : idx + 1], errors="coerce").dropna()
         if len(hist_ret) < window // 2:
             distances[ticker] = 0.0
             continue
@@ -232,6 +240,7 @@ def simulate_period(
     positions_hist: list[list[float]] = []
     cash_hist: list[float] = []
     turnover_hist: list[float] = []
+    state_history = {}
 
     macro_eval = {}
     macro_path = Path("capital_flow_analysis/data/overnight_gap_features_1d.csv")
@@ -339,13 +348,28 @@ def simulate_period(
             twii_down_fast = market_trends_fast.get("^TWII", 1.0) < -0.05
             ixic_down_fast = market_trends_fast.get("^IXIC", 1.0) < -0.05
             
-            if twii_down and ixic_down:
-                level = "CRITICAL"
-            elif (twii_down_fast and ixic_down_fast):
-                # Faster trigger if market drops >5% in 20 days
-                level = "WARN"
-            elif twii_down or ixic_down:
-                level = "WARN"
+            ma_120_distance = build_ma_distance_as_of(enriched, ["^TWII", "^IXIC"], signal_date, window=120)
+            ma_60_distance = build_ma_distance_as_of(enriched, ["^TWII", "^IXIC"], signal_date, window=60)
+            ma_20_distance = build_ma_distance_as_of(enriched, ["^TWII", "^IXIC"], signal_date, window=20)
+            twii_120_dist = ma_120_distance.get("^TWII", 1.0)
+            twii_60_dist = ma_60_distance.get("^TWII", 1.0)
+            twii_20_dist = ma_20_distance.get("^TWII", 1.0)
+            ixic_120_dist = ma_120_distance.get("^IXIC", 1.0)
+            ixic_20_dist = ma_20_distance.get("^IXIC", 1.0)
+
+            # State definitions
+            twii_below_120 = twii_120_dist < -0.02
+            twii_below_60 = twii_60_dist < 0.0
+            twii_crash = twii_20_dist < -0.05
+            ixic_crash = ixic_20_dist < -0.05
+            
+            level = "OK"
+            if (twii_below_120 and twii_below_60) or twii_crash or ixic_crash:
+                level = "CRITICAL"  # Deep bear market or sudden crash
+            elif twii_below_120 and not twii_below_60:
+                level = "WARN"      # Bear market rally (Fakeout)
+            elif twii_below_60 or ixic_120_dist < -0.02:
+                level = "WARN"      # Bull market correction or Nasdaq crash
 
             sig_date_obj = signal_date.date()
             if sig_date_obj in macro_eval:
@@ -353,7 +377,12 @@ def simulate_period(
                 if gap_level == "CRITICAL" or (gap_level == "WARN" and level == "OK"):
                     level = gap_level
             
-            daily_market_context = MarketContext(macro_guard_level=level)
+            twii_vol = 0.15
+            if "^TWII" in enriched:
+                twii_vols = build_vols_as_of(enriched, ["^TWII"], signal_date, vol_window=cfg.vol_window, min_vol_obs=cfg.min_vol_obs, vol_floor=cfg.vol_floor)
+                twii_vol = twii_vols.get("^TWII", 0.15)
+                
+            daily_market_context = MarketContext(macro_guard_level=level, market_volatility=twii_vol)
 
         ma_20_distance = build_ma_distance_as_of(enriched, tickers, signal_date, window=20)
         ma_60_distance = build_ma_distance_as_of(enriched, tickers, signal_date, window=60)
@@ -399,10 +428,21 @@ def simulate_period(
                 open_returns[ticker] = 0.0
                 log_returns[ticker] = 0.0
 
+        # Sell Throttling (Staged Rebalance) only under liquidity stress tests
         if cfg.liquidity_stress:
+            prev_total_weight = sum(positions.values())
+            target_total_weight = sum(target.target_weights.values())
+            if prev_total_weight - target_total_weight > 0.30:
+                allowed_reduction = 0.30
+                alpha = allowed_reduction / (prev_total_weight - target_total_weight)
+                for t in tickers:
+                    p_w = positions.get(t, 0.0)
+                    t_w = target.target_weights.get(t, 0.0)
+                    target.target_weights[t] = p_w + alpha * (t_w - p_w)
+            
+            # Force Limit Down for the remainder that is sold
             prev_total = sum(positions.values())
             target_total = sum(target.target_weights.values())
-            # If allocator is dumping > 30% of portfolio at once (panic sell)
             if prev_total - target_total > 0.30:
                 for t in positions:
                     if target.target_weights.get(t, 0.0) < positions[t]:
@@ -463,6 +503,7 @@ def simulate_period(
         cash_hist.append(cash_weight)
         turnover_hist.append(turnover)
         portfolio_hist.append(portfolio_value)
+        state_history[signal_date] = level
 
     return {
         "daily_returns": daily_returns,
@@ -470,6 +511,7 @@ def simulate_period(
         "cash_weights": cash_hist,
         "turnover": turnover_hist,
         "portfolio_hist": portfolio_hist,
+        "state_history": state_history,
         "n_days": len(daily_returns),
         "test_start": test_start,
         "test_end": test_end,

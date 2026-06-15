@@ -28,7 +28,7 @@ class RuleBasedAllocatorConfig:
     yellow_max_exposure: float = 0.50
     red_mdd: float = 0.35
     red_max_exposure: float = 0.0
-    max_single_weight: float = 0.35
+    max_single_weight: float = 0.20
     min_score: float = 1e-4
     enable_momentum_scaling: bool = False
     momentum_scale_factor: float = 5.0
@@ -61,8 +61,17 @@ class RuleBasedAllocator(PortfolioAllocator):
         if not scores:
             return TargetPortfolio(target_weights={}, cash_weight=1.0)
 
+        # Apply score penalty for high volatility
+        adjusted_scores = {}
+        for t, s in scores.items():
+            v = max(float(vols.get(t, cfg.vol_floor)), cfg.vol_floor)
+            penalty = 1.0
+            if v > 0.40:
+                penalty = (0.40 / v) ** 2
+            adjusted_scores[t] = s * penalty
+
         sorted_scores = sorted(
-            scores.items(),
+            adjusted_scores.items(),
             key=lambda item: item[1],
             reverse=True,
         )
@@ -75,12 +84,20 @@ class RuleBasedAllocator(PortfolioAllocator):
             if weight > 1e-4 and ticker in top_hysteresis:
                 selected.add(ticker)
 
+        dynamic_min_score = cfg.min_score
+        if market_context and (market_context.macro_guard_level == "WARN" or market_context.macro_guard_level == "CRITICAL"):
+            dynamic_min_score = max(cfg.min_score, 0.005)
+
         # Filter available names
         valid_tickers = []
         for t, score in sorted_scores:
             if t not in selected:
                 continue
-            if score < cfg.min_score:
+                
+            # Apply dynamic min_score only for NEW entries.
+            # If already holding, use standard min_score to prevent churn.
+            required_score = dynamic_min_score if state.positions.get(t, 0.0) < 1e-4 else cfg.min_score
+            if score < required_score:
                 continue
 
             if self.config.enable_trend_filter and trends is not None:
@@ -107,6 +124,13 @@ class RuleBasedAllocator(PortfolioAllocator):
 
         selected_sorted = valid_tickers
 
+        effective_target_vol = cfg.target_vol_annual
+        if market_context and market_context.market_volatility is not None:
+            if market_context.market_volatility > 0.20:
+                # Compress target vol during high market turbulence (VIX/TWII vol > 20%)
+                vol_scaler = 0.20 / market_context.market_volatility
+                effective_target_vol = cfg.target_vol_annual * max(0.5, vol_scaler)
+
         raw_weights: dict[str, float] = {}
         if cfg.weighting_method == "equal":
             n_selected = len(selected_sorted)
@@ -116,7 +140,8 @@ class RuleBasedAllocator(PortfolioAllocator):
             for ticker in selected_sorted:
                 vol = max(float(vols.get(ticker, cfg.vol_floor)), cfg.vol_floor)
                 # target_weight = (Target_Vol / sqrt(K)) / Asset_Vol
-                raw_weights[ticker] = (cfg.target_vol_annual / np.sqrt(cfg.top_k)) / vol
+                raw_weight = (effective_target_vol / np.sqrt(cfg.top_k)) / vol
+                raw_weights[ticker] = raw_weight
         else:
             inv_vol: dict[str, float] = {}
             for ticker in selected_sorted:
@@ -145,7 +170,7 @@ class RuleBasedAllocator(PortfolioAllocator):
         exposure = 1.0
         if cfg.enable_vol_target and cfg.weighting_method != "abs_vol_parity":
             portfolio_vol = self._estimate_portfolio_vol(raw_weights, vols, cfg.vol_floor)
-            exposure = min(1.0, cfg.target_vol_annual / max(portfolio_vol, cfg.vol_floor))
+            exposure = min(1.0, effective_target_vol / max(portfolio_vol, cfg.vol_floor))
             
         exposure = self._apply_mdd_cap(exposure, state.rolling_mdd, cfg)
         exposure = self._apply_macro_cap(exposure, market_context)
