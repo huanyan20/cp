@@ -542,7 +542,7 @@ def generate_report(
 
     md += "## 0. Promotion Decision (RL)\n\n"
     if promotion_result is not None:
-        if promotion_result.can_promote:
+        if promotion_result.core_gate_approved:
             md += "### ✓ MODEL ELIGIBLE FOR PROMOTION\n\n"
         else:
             md += "### ✗ MODEL NOT ELIGIBLE FOR PROMOTION\n\n"
@@ -649,7 +649,7 @@ def generate_report(
         md += _sl_period_markdown(sl_period_df)
         if sl_promotion_result is not None:
             md += "### 8c. SL Promotion Gate\n\n"
-            status = "ELIGIBLE" if sl_promotion_result.can_promote else "BLOCKED"
+            status = "ELIGIBLE" if sl_promotion_result.core_gate_approved else "BLOCKED"
             md += f"**{status}** (risk: {sl_promotion_result.risk_level.upper()})\n\n"
             for gate in sl_promotion_result.gates:
                 mark = "✓" if gate.passed else "✗"
@@ -707,7 +707,8 @@ def generate_report(
         # New: Promotion gate result
         "promotion_gate": (
             {
-                "can_promote": promotion_result.can_promote,
+                "core_gate_approved": promotion_result.core_gate_approved,
+                "full_gate_approved": promotion_result.full_gate_approved,
                 "risk_level": promotion_result.risk_level,
                 "summary": promotion_result.summary,
                 "gates": [
@@ -751,8 +752,8 @@ def generate_report(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate experiment report from metrics")
     parser.add_argument("--dir", type=str, default="results_dir", help="Results directory")
-    parser.add_argument("--output-md", type=str, default="experiment_report.md")
-    parser.add_argument("--output-json", type=str, default="experiment_summary.json")
+    parser.add_argument("--output-md", type=str, default=None)
+    parser.add_argument("--output-json", type=str, default=None)
     parser.add_argument(
         "--env-config-hash",
         type=str,

@@ -457,7 +457,8 @@ def run_walk_forward_sl(
             seed=seed,
         )
         result["promotion_gate"] = {
-            "can_promote": gate_result.can_promote,
+            "core_gate_approved": gate_result.core_gate_approved,
+            "full_gate_approved": gate_result.full_gate_approved,
             "risk_level": gate_result.risk_level,
             "summary": gate_result.summary,
             "gates_passed": sum(1 for g in gate_result.gates if g.passed),
@@ -566,7 +567,7 @@ def main(argv: list[str] | None = None) -> int:
         payload["gate_result_path"] = result["gate_result_path"]
     print(json.dumps(payload, indent=2))
     if "promotion_gate" in result:
-        status = "APPROVED" if result["promotion_gate"]["can_promote"] else "BLOCKED"
+        status = "APPROVED" if result["promotion_gate"]["core_gate_approved"] else "BLOCKED"
         safe_summary = (
             result["promotion_gate"]["summary"]
             .replace("\u2713", "[PASS]")

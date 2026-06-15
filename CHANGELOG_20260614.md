@@ -16,8 +16,8 @@ The Supervised Learning (SL) pipeline with `h10` (10-day horizon) and `rule` all
    - Tweaked `Macro Guard` thresholds in `backtest.py` to be more sensitive to early downtrends (`-0.02` for CRITICAL, `0.01` for WARN based on TWII 60d momentum) to protect the portfolio dynamically rather than relying solely on internal MDD limits.
 
 ### Results
-- **Overall Return**: +134.42%
-- **Overall MDD**: 32.45% (Compliant with < 35% limit)
-- **Overall Sortino**: 1.36
+- **Overall Return**: +27.65%
+- **Overall MDD**: 24.91% (Compliant with < 30% limit)
+- **Overall Sortino**: 0.85
 - **Turnover**: Maintained strictly within acceptable bounds.
-- **Gate Status**: APPROVED (5/5). Ready for `trade_guard` dry run phase.
+- **Gate Status**: DRY-RUN ELIGIBLE (5/7). Ready for `trade_guard` dry run phase.

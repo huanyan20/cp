@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import yfinance as yf
 
 # Ensure project root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -33,6 +34,20 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("EvaluateSLLive")
 SETTINGS = load_settings()
+
+
+def fetch_latest_close(ticker: str) -> float | None:
+    """Fetch a recent close for live lot sizing."""
+    try:
+        hist = yf.Ticker(ticker).history(period="5d")
+    except Exception as e:
+        logger.warning(f"Failed to fetch latest close for {ticker}: {e}")
+        return None
+    if hist.empty or "Close" not in hist:
+        logger.warning(f"No recent close available for {ticker}")
+        return None
+    close = float(hist["Close"].dropna().iloc[-1])
+    return close if close > 0 else None
 
 def get_current_positions_and_mdd(aid: str | None) -> tuple[dict[str, float], float, float]:
     """Fetch current positions from CMoney and calculate live MDD."""
@@ -75,7 +90,7 @@ def get_current_positions_and_mdd(aid: str | None) -> tuple[dict[str, float], fl
 def main():
     parser = argparse.ArgumentParser(description="Live Signal Generator for SL LightGBM h10")
     parser.add_argument("--horizon", type=int, default=10, help="Prediction horizon")
-    parser.add_argument("--top-k", type=int, default=10, help="Number of stocks to select")
+    parser.add_argument("--top-k", type=int, default=SETTINGS.research.default_topk, help="Number of stocks to select")
     parser.add_argument("--lookback-days", type=int, default=730, help="Days of data to fetch for training")
     parser.add_argument("--output", type=str, default=str(SETTINGS.paths.signal_path), help="Path to write signal.json")
     parser.add_argument("--aid", type=str, default=os.getenv("CMONEY_AID"), help="CMoney Account ID")
@@ -164,9 +179,10 @@ def main():
     if total_assets > 0:
         for ticker, qty in inventory_qty.items():
             if ticker in data and not data[ticker].empty:
-                latest_close = float(data[ticker]["close"].iloc[-1])
-                weight = (qty * latest_close) / total_assets
-                current_positions[ticker] = weight
+                latest_close = fetch_latest_close(ticker)
+                if latest_close is not None:
+                    weight = (qty * latest_close) / total_assets
+                    current_positions[ticker] = weight
 
     state = PortfolioState(
         positions=current_positions,
@@ -191,7 +207,9 @@ def main():
 
     allocator = RuleBasedAllocator(RuleBasedAllocatorConfig(
         top_k=args.top_k,
-        max_single_weight=SETTINGS.risk_limits.max_single_weight
+        max_single_weight=SETTINGS.risk_limits.max_single_weight,
+        target_vol_annual=SETTINGS.research.sl_target_vol,
+        trailing_stop_threshold=SETTINGS.research.sl_trailing_stop
     ))
 
     logger.info("Allocating target weights...")
@@ -199,12 +217,23 @@ def main():
     weights = target.target_weights
     signal_id = f"sl-h{args.horizon}-{datetime.now().strftime('%Y%m%d')}"
 
+    target_lots = {}
+    if total_assets > 0:
+        for ticker, weight in weights.items():
+            if ticker in data and not data[ticker].empty:
+                latest_close = fetch_latest_close(ticker)
+                if latest_close is not None:
+                    target_amt = total_assets * weight
+                    lots = int(target_amt / (latest_close * 1000))
+                    target_lots[ticker] = lots
+
     signal = {
         "signal_id": signal_id,
         "created_at": datetime.utcnow().isoformat() + "Z",
         "aid": args.aid,
         "source": f"SL LightGBM h{args.horizon} Live",
         "target_weights": weights,
+        "target_lots": target_lots,
         "metadata": {
             "horizon": args.horizon,
             "train_start": start_date_str,

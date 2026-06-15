@@ -25,7 +25,8 @@ class PromotionGate:
 class PromotionResult:
     """Complete promotion decision with all gate results."""
 
-    can_promote: bool
+    core_gate_approved: bool
+    full_gate_approved: bool
     gates: list[PromotionGate]
     summary: str
     risk_level: str  # "low", "medium", "high"
@@ -35,7 +36,8 @@ class PromotionResult:
             return value.replace("✓", "PASS").replace("✗", "FAIL")
 
         lines = [
-            f"Promotion Result: {'APPROVED' if self.can_promote else 'BLOCKED'}"
+            f"Core Gate: {'APPROVED' if self.core_gate_approved else 'BLOCKED'}",
+            f"Full Gate: {'APPROVED' if self.full_gate_approved else 'BLOCKED'}"
         ]
         lines.append(f"Risk Level: {self.risk_level.upper()}")
         lines.append("")
@@ -478,13 +480,19 @@ def check_stress_gate(
 
 
 def check_period_consistency_gate(
-    period_df: Any,  # pd.DataFrame
+    period_df: Any,
+    min_worst_return: float = -0.10,
+    max_negative_periods: int = 1,
+    min_worst_sortino: float = 0.0,
 ) -> PromotionGate:
     """
     Check if performance is consistent across walk-forward periods (no extreme outliers).
 
     Args:
         period_df: DataFrame with period-level metrics
+        min_worst_return: Minimum acceptable return for the worst period
+        max_negative_periods: Maximum number of periods allowed to have negative returns
+        min_worst_sortino: Minimum acceptable Sortino for the worst period
 
     Returns:
         PromotionGate with check result
@@ -499,6 +507,8 @@ def check_period_consistency_gate(
 
     try:
         period_returns = period_df.groupby("period")["total_return"].mean()
+        period_sortinos = period_df.groupby("period")["sortino"].mean()
+
         if len(period_returns) < 2:
             return PromotionGate(
                 name="Period Consistency",
@@ -507,27 +517,38 @@ def check_period_consistency_gate(
                 details={"periods": len(period_returns)},
             )
 
-        # Check if any period is dramatically worse
         median_return = period_returns.median()
         std_return = period_returns.std()
         worst_period = period_returns.min()
-        severe_outlier = worst_period < (median_return - 3 * std_return)
+        negative_count = int((period_returns < 0).sum())
+        worst_sortino = period_sortinos.min()
 
-        passed = not severe_outlier
-        message = (
-            f"Period returns median {median_return*100:.1f}% +/- {std_return*100:.1f}%. "
-            f"Worst period: {worst_period*100:.1f}%. "
-            f"{'Extreme outlier detected!' if severe_outlier else 'Consistent performance.'}"
-        )
+        # Hard constraints
+        failed_reasons = []
+        if worst_period < min_worst_return:
+            failed_reasons.append(f"Worst return {worst_period*100:.1f}% < {min_worst_return*100:.1f}%")
+        if negative_count > max_negative_periods:
+            failed_reasons.append(f"{negative_count} negative periods > {max_negative_periods}")
+        if worst_sortino < min_worst_sortino:
+            failed_reasons.append(f"Worst Sortino {worst_sortino:.2f} < {min_worst_sortino:.2f}")
+
+        passed = len(failed_reasons) == 0
+        
+        if passed:
+            message = f"Period returns median {median_return*100:.1f}% +/- {std_return*100:.1f}%. Worst period: {worst_period*100:.1f}%. Consistent performance."
+        else:
+            message = f"Inconsistent performance: " + ", ".join(failed_reasons)
 
         return PromotionGate(
             name="Period Consistency",
             passed=passed,
             message=message,
             details={
-                "median_return": median_return,
-                "std_return": std_return,
-                "worst_period": worst_period,
+                "median_return": float(median_return),
+                "std_return": float(std_return),
+                "worst_period": float(worst_period),
+                "negative_count": negative_count,
+                "worst_sortino": float(worst_sortino),
                 "num_periods": len(period_returns),
             },
         )
@@ -611,10 +632,11 @@ def run_promotion_gate(
     critical_gates = gates[:5]  # Core gates
     critical_passed = sum(1 for g in critical_gates if g.passed)
 
-    can_promote = all(g.passed for g in critical_gates)
+    core_gate_approved = all(g.passed for g in critical_gates)
+    full_gate_approved = all(g.passed for g in gates)
 
     # Risk level assessment
-    if can_promote:
+    if core_gate_approved:
         risk_level = "low" if critical_passed == len(critical_gates) else "medium"
     else:
         failed_count = len(critical_gates) - critical_passed
@@ -624,10 +646,17 @@ def run_promotion_gate(
     passed_gates = sum(1 for g in gates if g.passed)
     total_gates = len(gates)
 
-    if can_promote:
+    if full_gate_approved:
         summary = (
-            f"✓ Model cleared all {len(critical_gates)} critical gates. "
-            f"Promoted to live trading eligible. "
+            f"✓ Model cleared all {total_gates} gates. "
+            f"Promoted to full live trading eligible. "
+            f"({passed_gates}/{total_gates} total gates passed)"
+        )
+    elif core_gate_approved:
+        failed = [g.name for g in gates if not g.passed]
+        summary = (
+            f"✓ Model cleared core gates but blocked by advanced gate(s): {', '.join(failed)}. "
+            f"Promoted to dry-run / paper-trading eligible. "
             f"({passed_gates}/{total_gates} total gates passed)"
         )
     else:
@@ -639,7 +668,8 @@ def run_promotion_gate(
         )
 
     return PromotionResult(
-        can_promote=can_promote,
+        core_gate_approved=core_gate_approved,
+        full_gate_approved=full_gate_approved,
         gates=gates,
         summary=summary,
         risk_level=risk_level,

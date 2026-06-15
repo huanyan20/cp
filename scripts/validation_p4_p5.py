@@ -179,7 +179,7 @@ try:
     
     result = run_promotion_gate(raw_summary=test_summary)
     assert isinstance(result, PromotionResult)
-    assert hasattr(result, "can_promote")
+    assert hasattr(result, "core_gate_approved")
     assert hasattr(result, "gates")
     assert hasattr(result, "risk_level")
     print("  ✓ run_promotion_gate() 正常運作")

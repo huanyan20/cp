@@ -48,20 +48,22 @@ def main():
             )
             
             gate = res.get("promotion_gate", {})
-            can_promote = gate.get("can_promote", False)
+            core_gate_approved = gate.get("core_gate_approved", False)
+            full_gate_approved = gate.get("full_gate_approved", False)
             summary = gate.get("summary", "No summary")
 
             results[seed] = {
-                "can_promote": can_promote,
+                "core_gate_approved": core_gate_approved,
+                "full_gate_approved": full_gate_approved,
                 "summary": summary,
                 "overall_sortino": res.get("overall", {}).get("sortino", 0.0),
                 "overall_mdd": res.get("overall", {}).get("max_drawdown", 0.0)
             }
 
-            logger.info(f"Seed {seed} Gate Result: {'APPROVED' if can_promote else 'BLOCKED'}")
+            logger.info(f"Seed {seed} Gate Result: {'APPROVED' if core_gate_approved else 'BLOCKED'}")
             logger.info(f"Summary: {summary}")
 
-            if not can_promote:
+            if not core_gate_approved:
                 all_passed = False
                 failed_seeds.append(seed)
 
@@ -69,7 +71,7 @@ def main():
             logger.error(f"Failed to evaluate seed {seed}: {e}")
             all_passed = False
             failed_seeds.append(seed)
-            results[seed] = {"error": str(e), "can_promote": False}
+            results[seed] = {"error": str(e), "core_gate_approved": False, "full_gate_approved": False}
 
     logger.info(f"\n{'='*40}\nMulti-Seed Confirmation Summary\n{'='*40}")
     print(json.dumps(results, indent=2))

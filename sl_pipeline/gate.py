@@ -143,7 +143,8 @@ def build_sl_period_dataframe(records: list[dict]) -> pd.DataFrame:
 
 def promotion_result_to_dict(result: PromotionResult) -> dict:
     return {
-        "can_promote": result.can_promote,
+        "core_gate_approved": result.core_gate_approved,
+        "full_gate_approved": result.full_gate_approved,
         "risk_level": result.risk_level,
         "summary": result.summary,
         "gates": [
@@ -162,7 +163,7 @@ def run_sl_promotion_gate(
     metrics: dict | str | Path | None = None,
     *,
     results_dir: str | Path | None = None,
-    min_seeds: int = 1,
+    min_seeds: int | None = None,
     sortino_threshold: float | None = None,
     max_drawdown_limit: float | None = None,
     turnover_limit: float | None = None,
@@ -236,6 +237,7 @@ def run_sl_promotion_gate(
         print(f"[WARN] Could not load stress_summary: {e}")
         stress_summary = None
 
+    min_seeds = min_seeds if min_seeds is not None else SETTINGS.research.promotion_min_seeds
     raw_summary = build_sl_raw_summary(records)
     period_df = build_sl_period_dataframe(records)
     result = run_promotion_gate(

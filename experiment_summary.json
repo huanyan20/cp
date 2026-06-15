@@ -173,9 +173,10 @@
         "results_dir\\metrics_sac_enabled_wf_seed44.json"
     ],
     "promotion_gate": {
-        "can_promote": false,
-        "risk_level": "medium",
-        "summary": "✗ Model blocked by 4 gate(s): Sortino Stability, Drawdown Gate, Baseline Comparison, Stress Testing. Address failures before promotion. (3/7 total gates passed)",
+        "core_gate_approved": false,
+        "full_gate_approved": false,
+        "risk_level": "high",
+        "summary": "✗ Model blocked by 5 gate(s): Sortino Stability, Drawdown Gate, Period Consistency, Baseline Comparison, Stress Testing. Address failures before promotion. (2/7 total gates passed)",
         "gates": [
             {
                 "name": "Sortino Stability",
@@ -223,12 +224,14 @@
             },
             {
                 "name": "Period Consistency",
-                "passed": true,
-                "message": "Period returns median 9.6% +/- 47.7%. Worst period: -5.4%. Consistent performance.",
+                "passed": false,
+                "message": "Inconsistent performance: 2 negative periods > 1, Worst Sortino -0.29 < 0.00",
                 "details": {
                     "median_return": 0.09553877627523122,
                     "std_return": 0.47741101157015453,
                     "worst_period": -0.05414597658114406,
+                    "negative_count": 2,
+                    "worst_sortino": -0.286340521385648,
                     "num_periods": 4
                 }
             },
@@ -297,19 +300,20 @@
             "results_dir\\metrics_sl_rule_h5_seed44.json"
         ],
         "promotion_gate": {
-            "can_promote": true,
-            "risk_level": "low",
-            "summary": "✓ Model cleared all 5 critical gates. Promoted to live trading eligible. (5/7 total gates passed)",
+            "core_gate_approved": false,
+            "full_gate_approved": false,
+            "risk_level": "medium",
+            "summary": "✗ Model blocked by 3 gate(s): Period Consistency, Baseline Comparison, Stress Testing. Address failures before promotion. (4/7 total gates passed)",
             "gates": [
                 {
                     "name": "Sortino Stability",
                     "passed": true,
-                    "message": "3 seeds, Sortino 0.85 +/- 0.16. Need 1 seeds and >= 0.8 Sortino.",
+                    "message": "3 seeds, Sortino 0.85 +/- 0.16. Need 3 seeds and >= 0.8 Sortino.",
                     "details": {
                         "seeds": 3,
                         "sortino_mean": 0.8465801795673825,
                         "sortino_std": 0.1552110815720036,
-                        "min_seeds": 1,
+                        "min_seeds": 3,
                         "threshold": 0.8
                     }
                 },
@@ -347,12 +351,14 @@
                 },
                 {
                     "name": "Period Consistency",
-                    "passed": true,
-                    "message": "Period returns median 1.9% +/- 21.9%. Worst period: -15.3%. Consistent performance.",
+                    "passed": false,
+                    "message": "Inconsistent performance: Worst return -15.3% < -10.0%, 2 negative periods > 1, Worst Sortino -3.19 < 0.00",
                     "details": {
                         "median_return": 0.01888878357952543,
                         "std_return": 0.21928020282299127,
                         "worst_period": -0.15263356548649717,
+                        "negative_count": 2,
+                        "worst_sortino": -3.1927626916281118,
                         "num_periods": 5
                     }
                 },
@@ -544,7 +550,7 @@
                 "rl_passed": false,
                 "sl_passed": true,
                 "rl_message": "1 seeds, Sortino 1.74 +/- 0.00. Need 3 seeds and >= 0.8 Sortino.",
-                "sl_message": "3 seeds, Sortino 0.85 +/- 0.16. Need 1 seeds and >= 0.8 Sortino."
+                "sl_message": "3 seeds, Sortino 0.85 +/- 0.16. Need 3 seeds and >= 0.8 Sortino."
             },
             {
                 "gate": "Drawdown Gate",
@@ -569,26 +575,26 @@
             },
             {
                 "gate": "Period Consistency",
-                "rl_passed": true,
-                "sl_passed": true,
-                "rl_message": "Period returns median 9.6% +/- 47.7%. Worst period: -5.4%. Consistent performance.",
-                "sl_message": "Period returns median 1.9% +/- 21.9%. Worst period: -15.3%. Consistent performance."
+                "rl_passed": false,
+                "sl_passed": false,
+                "rl_message": "Inconsistent performance: 2 negative periods > 1, Worst Sortino -0.29 < 0.00",
+                "sl_message": "Inconsistent performance: Worst return -15.3% < -10.0%, 2 negative periods > 1, Worst Sortino -3.19 < 0.00"
             },
             {
                 "gate": "Overall",
                 "rl_passed": false,
-                "sl_passed": true,
-                "rl_message": "✗ Model blocked by 4 gate(s): Sortino Stability, Drawdown Gate, Baseline Comparison, Stress Testing. Address failures before promotion. (3/7 total gates passed)",
-                "sl_message": "✓ Model cleared all 5 critical gates. Promoted to live trading eligible. (5/7 total gates passed)"
+                "sl_passed": false,
+                "rl_message": "✗ Model blocked by 5 gate(s): Sortino Stability, Drawdown Gate, Period Consistency, Baseline Comparison, Stress Testing. Address failures before promotion. (2/7 total gates passed)",
+                "sl_message": "✗ Model blocked by 3 gate(s): Period Consistency, Baseline Comparison, Stress Testing. Address failures before promotion. (4/7 total gates passed)"
             }
         ],
         "verdict": [
             "Sortino: SL (0.85) is below 80% of RL (1.74); ratio=49%.",
             "MDD: SL (24.91%) beats RL (41.84%) — vol-target + tiered breaker working as intended.",
             "Turnover: RL lower than SL.",
-            "Promotion: SL clears Gate while RL is BLOCKED — prioritize SL as risk baseline."
+            "Promotion: both SL and RL blocked — continue R6/SL iteration."
         ],
         "rl_gate_approved": false,
-        "sl_gate_approved": true
+        "sl_gate_approved": false
     }
 }

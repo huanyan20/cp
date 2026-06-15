@@ -161,8 +161,8 @@ def build_gate_comparison(
         rows.append(
             {
                 "gate": "Overall",
-                "rl_passed": rl_gate.can_promote,
-                "sl_passed": sl_gate.can_promote,
+                "rl_passed": rl_gate.core_gate_approved,
+                "sl_passed": sl_gate.core_gate_approved,
                 "rl_message": rl_gate.summary,
                 "sl_message": sl_gate.summary,
             }
@@ -229,15 +229,15 @@ def build_sl_vs_rl_verdict(
         lines.append("Turnover: SL and RL comparable.")
 
     if rl_gate and sl_gate:
-        if sl_gate.can_promote and not rl_gate.can_promote:
+        if sl_gate.core_gate_approved and not rl_gate.core_gate_approved:
             lines.append(
                 "Promotion: SL clears Gate while RL is BLOCKED — prioritize SL as risk baseline."
             )
-        elif rl_gate.can_promote and not sl_gate.can_promote:
+        elif rl_gate.core_gate_approved and not sl_gate.core_gate_approved:
             lines.append(
                 "Promotion: RL clears Gate while SL is BLOCKED — RL remains production candidate."
             )
-        elif rl_gate.can_promote and sl_gate.can_promote:
+        elif rl_gate.core_gate_approved and sl_gate.core_gate_approved:
             lines.append("Promotion: both SL and RL clear core gates — compare Sortino/MDD trade-off.")
         else:
             lines.append("Promotion: both SL and RL blocked — continue R6/SL iteration.")
@@ -294,8 +294,8 @@ def build_sl_vs_rl_comparison(
         "periods": periods,
         "gates": gates,
         "verdict": verdict,
-        "rl_gate_approved": rl_promotion.can_promote if rl_promotion else None,
-        "sl_gate_approved": sl_promotion.can_promote if sl_promotion else None,
+        "rl_gate_approved": rl_promotion.core_gate_approved if rl_promotion else None,
+        "sl_gate_approved": sl_promotion.core_gate_approved if sl_promotion else None,
     }
 
 

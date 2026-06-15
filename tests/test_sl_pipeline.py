@@ -410,11 +410,16 @@ class SlGateTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            path = self._write_sl_metrics(tmp_path, sortino=1.5)
-            result, raw_summary, period_df = run_sl_promotion_gate(path)
+            self._write_sl_metrics(tmp_path, seed=42, sortino=1.5)
+            self._write_sl_metrics(tmp_path, seed=43, sortino=1.4)
+            self._write_sl_metrics(tmp_path, seed=44, sortino=1.3)
+            result, raw_summary, period_df = run_sl_promotion_gate(
+                results_dir=tmp_path,
+                target_horizon=5,
+            )
         self.assertEqual(len(raw_summary), 1)
         self.assertGreater(len(period_df), 0)
-        self.assertTrue(result.can_promote)
+        self.assertTrue(result.core_gate_approved)
 
 
 class SlRlSpikeTests(unittest.TestCase):

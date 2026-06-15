@@ -502,7 +502,7 @@ def build_sl_seed_metrics(
             "strategy": "sl_rule",
             "allocator": allocator,
             "horizon": horizon,
-            "vol_target": 0.18,
+            "vol_target": settings.research.sl_target_vol,
             "top_k": settings.research.default_topk,
         },
         "overall": {},

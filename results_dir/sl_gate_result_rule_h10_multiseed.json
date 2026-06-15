@@ -4,19 +4,20 @@
   "horizon": 10,
   "metrics_path": null,
   "promotion_gate": {
-    "can_promote": true,
-    "risk_level": "low",
-    "summary": "✓ Model cleared all 5 critical gates. Promoted to live trading eligible. (5/7 total gates passed)",
+    "core_gate_approved": false,
+    "full_gate_approved": false,
+    "risk_level": "medium",
+    "summary": "✗ Model blocked by 3 gate(s): Period Consistency, Baseline Comparison, Stress Testing. Address failures before promotion. (4/7 total gates passed)",
     "gates": [
       {
         "name": "Sortino Stability",
         "passed": true,
-        "message": "3 seeds, Sortino 0.85 +/- 0.16. Need 1 seeds and >= 0.8 Sortino.",
+        "message": "3 seeds, Sortino 0.85 +/- 0.16. Need 3 seeds and >= 0.8 Sortino.",
         "details": {
           "seeds": 3,
           "sortino_mean": 0.8465801795673825,
           "sortino_std": 0.1552110815720036,
-          "min_seeds": 1,
+          "min_seeds": 3,
           "threshold": 0.8
         }
       },
@@ -54,12 +55,14 @@
       },
       {
         "name": "Period Consistency",
-        "passed": true,
-        "message": "Period returns median 1.9% +/- 21.9%. Worst period: -15.3%. Consistent performance.",
+        "passed": false,
+        "message": "Inconsistent performance: Worst return -15.3% < -10.0%, 2 negative periods > 1, Worst Sortino -3.19 < 0.00",
         "details": {
           "median_return": 0.01888878357952543,
           "std_return": 0.21928020282299127,
           "worst_period": -0.15263356548649717,
+          "negative_count": 2,
+          "worst_sortino": -3.1927626916281118,
           "num_periods": 5
         }
       },

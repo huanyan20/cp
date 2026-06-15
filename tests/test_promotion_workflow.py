@@ -40,7 +40,7 @@ def test_promotion_gate_workflow():
 
     result1 = run_promotion_gate(raw_summary=strong_model, period_df=None)
     print(result1)
-    assert result1.can_promote, "Strong model should be approved"
+    assert result1.core_gate_approved, "Strong model should be approved"
     print()
 
     # Scenario 2: Weak model fails promotion
@@ -70,7 +70,7 @@ def test_promotion_gate_workflow():
 
     result2 = run_promotion_gate(raw_summary=weak_model, period_df=None)
     print(result2)
-    assert not result2.can_promote, "Weak model should be blocked"
+    assert not result2.core_gate_approved, "Weak model should be blocked"
     print()
 
     # Scenario 3: Medium model with optional gates

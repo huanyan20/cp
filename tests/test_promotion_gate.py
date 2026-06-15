@@ -196,9 +196,9 @@ class PromotionGateTests(unittest.TestCase):
     def test_period_consistency_gate_with_period_data(self):
         period_df = pd.DataFrame(
             [
-                {"period": "2024H2", "total_return": 0.10},
-                {"period": "2025H1", "total_return": 0.08},
-                {"period": "2025H2", "total_return": 0.09},
+                {"period": "2024H2", "total_return": 0.10, "sortino": 1.5},
+                {"period": "2025H1", "total_return": 0.08, "sortino": 1.2},
+                {"period": "2025H2", "total_return": 0.09, "sortino": 1.3},
             ]
         )
         gate = check_period_consistency_gate(period_df)
@@ -213,7 +213,7 @@ class PromotionGateTests(unittest.TestCase):
             ablation_summary={},
             stress_summary={},
         )
-        self.assertTrue(result.can_promote)
+        self.assertTrue(result.core_gate_approved)
         self.assertEqual(result.risk_level, "low")
         self.assertIn("✓", result.summary)
 
@@ -226,7 +226,7 @@ class PromotionGateTests(unittest.TestCase):
             ablation_summary={},
             stress_summary={},
         )
-        self.assertFalse(result.can_promote)
+        self.assertFalse(result.core_gate_approved)
         self.assertIn("✗", result.summary)
 
     def test_promotion_gate_result_format(self):
@@ -239,7 +239,8 @@ class PromotionGateTests(unittest.TestCase):
             stress_summary={},
         )
         result_str = str(result)
-        self.assertIn("Promotion Result", result_str)
+        self.assertIn("Core Gate", result_str)
+        self.assertIn("Full Gate", result_str)
         self.assertIn("Risk Level", result_str)
         self.assertIn("Summary", result_str)
 
