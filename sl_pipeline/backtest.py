@@ -106,6 +106,43 @@ def build_ma_distance_as_of(
     return distances
 
 
+def build_ma_slope_as_of(
+    enriched: dict[str, pd.DataFrame],
+    tickers: list[str],
+    date: pd.Timestamp,
+    *,
+    window: int = 120,
+) -> dict[str, bool]:
+    """Check if the moving average is sloping upwards (current price > price N days ago)."""
+    slopes: dict[str, bool] = {}
+    first_ticker = list(enriched.keys())[0] if enriched else None
+    
+    for ticker in tickers:
+        if ticker in enriched:
+            df = enriched[ticker]
+            ret_col = "log_return"
+        elif first_ticker and f"macro_{ticker}_log_return" in enriched[first_ticker].columns:
+            df = enriched[first_ticker]
+            ret_col = f"macro_{ticker}_log_return"
+        else:
+            slopes[ticker] = True
+            continue
+            
+        idx = df.index.searchsorted(date, side="right") - 1
+        if idx < 0:
+            slopes[ticker] = True
+            continue
+        start_idx = max(0, idx - window + 1)
+        hist_ret = pd.to_numeric(df[ret_col].iloc[start_idx : idx + 1], errors="coerce").dropna()
+        if len(hist_ret) < window // 2:
+            slopes[ticker] = True
+            continue
+        
+        # SMA_t > SMA_{t-1} iff P_t > P_{t-N}. sum(log_returns) > 0 iff P_t > P_{t-N}
+        slopes[ticker] = bool(hist_ret.sum() > 0.0)
+    return slopes
+
+
 def build_trading_calendar(
     enriched: dict[str, pd.DataFrame],
     scores: dict[str, pd.Series],
@@ -357,6 +394,9 @@ def simulate_period(
             ixic_120_dist = ma_120_distance.get("^IXIC", 1.0)
             ixic_20_dist = ma_20_distance.get("^IXIC", 1.0)
 
+            ma_120_slope = build_ma_slope_as_of(enriched, ["^TWII"], signal_date, window=120)
+            twii_120_slope_positive = ma_120_slope.get("^TWII", True)
+
             # State definitions
             twii_below_120 = twii_120_dist < -0.02
             twii_below_60 = twii_60_dist < 0.0
@@ -370,6 +410,10 @@ def simulate_period(
                 level = "WARN"      # Bear market rally (Fakeout)
             elif twii_below_60 or ixic_120_dist < -0.02:
                 level = "WARN"      # Bull market correction or Nasdaq crash
+
+            # Filter false breakouts: MA120 slope must be positive to be fully OK
+            if level == "OK" and not twii_120_slope_positive:
+                level = "WARN"
 
             sig_date_obj = signal_date.date()
             if sig_date_obj in macro_eval:
