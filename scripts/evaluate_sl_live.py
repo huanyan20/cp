@@ -213,13 +213,29 @@ def main():
         twii_down_fast = market_trends_20.get("^TWII", 1.0) < -0.05
         ixic_down_fast = market_trends_20.get("^IXIC", 1.0) < -0.05
         
+        from sl_pipeline.backtest import build_ma_distance_as_of
+        ma_120_distance = build_ma_distance_as_of(data, ["^TWII", "^IXIC"], pd.Timestamp(today_str), window=120)
+        ma_60_distance = build_ma_distance_as_of(data, ["^TWII", "^IXIC"], pd.Timestamp(today_str), window=60)
+        ma_20_distance = build_ma_distance_as_of(data, ["^TWII", "^IXIC"], pd.Timestamp(today_str), window=20)
+        twii_120_dist = ma_120_distance.get("^TWII", 1.0)
+        twii_60_dist = ma_60_distance.get("^TWII", 1.0)
+        twii_20_dist = ma_20_distance.get("^TWII", 1.0)
+        ixic_120_dist = ma_120_distance.get("^IXIC", 1.0)
+        ixic_20_dist = ma_20_distance.get("^IXIC", 1.0)
+
+        # State definitions
+        twii_below_120 = twii_120_dist < -0.02
+        twii_below_60 = twii_60_dist < 0.0
+        twii_crash = twii_20_dist < -0.05
+        ixic_crash = ixic_20_dist < -0.05
+        
         level = "OK"
-        if twii_down and ixic_down:
-            level = "CRITICAL"
-        elif (twii_down_fast and ixic_down_fast):
-            level = "WARN"
-        elif twii_down or ixic_down:
-            level = "WARN"
+        if (twii_below_120 and twii_below_60) or twii_crash or ixic_crash:
+            level = "CRITICAL"  # Deep bear market or sudden crash
+        elif twii_below_120 and not twii_below_60:
+            level = "WARN"      # Bear market rally (Fakeout)
+        elif twii_below_60 or ixic_120_dist < -0.02:
+            level = "WARN"      # Bull market correction or Nasdaq crash
             
         if level != "OK":
             market_context = MarketContext(macro_guard_level=level)
@@ -245,7 +261,12 @@ def main():
                 if latest_close is not None:
                     target_amt = total_assets * weight
                     lots = int(target_amt / (latest_close * 1000))
-                    target_lots[ticker] = lots
+                    if lots > 0:
+                        target_lots[ticker] = lots
+
+        # Fail-closed: if weights are not empty but lots are empty, block execution
+        if weights and not target_lots:
+            raise RuntimeError("FAIL-CLOSED: Target weights are non-empty, but target_lots is empty. This usually means total_assets is too small or price data is missing.")
 
     import hashlib
     

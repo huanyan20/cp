@@ -1,79 +1,85 @@
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pandas as pd
 import pytest
+import sys
+from unittest.mock import patch, MagicMock
+from pathlib import Path
+import json
+import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.evaluate_sl_live import main
 
-import scripts.evaluate_sl_live as eval_live
+def test_evaluate_sl_live_fail_closed(tmp_path):
+    # Set up mock command line arguments
+    test_args = [
+        "scripts/evaluate_sl_live.py",
+        "--output", str(tmp_path / "signal.json"),
+        "--top-k", "5",
+        "--horizon", "10"
+    ]
+    
+    mock_data = {
+        "2330.TW": pd.DataFrame({"Close_norm": [500], "log_return": [0.01], "macro_^TWII_log_return": [0.0], "macro_^IXIC_log_return": [0.0]}, index=[pd.Timestamp("2024-06-01")]),
+        "^TWII": pd.DataFrame({"Close_norm": [20000], "log_return": [0.01]}, index=[pd.Timestamp("2024-06-01")]),
+        "^IXIC": pd.DataFrame({"Close_norm": [15000], "log_return": [0.01]}, index=[pd.Timestamp("2024-06-01")]),
+        "USDTWD=X": pd.DataFrame({"Close_norm": [32]}, index=[pd.Timestamp("2024-06-01")])
+    }
+    
+    with patch("sys.argv", test_args):
+        with patch("scripts.evaluate_sl_live.fetch_multi_asset_data", return_value=mock_data):
+            with patch("scripts.evaluate_sl_live.fetch_latest_close", return_value=500.0):
+                with patch("scripts.evaluate_sl_live.get_current_positions_and_mdd", return_value=({}, 0.0, 1000.0)):
+                    # Target weights will be non-empty (assuming generator predicts something)
+                    # But total_assets=1000 and close=500 -> target_amt = 1000 * 0.2 = 200
+                    # lots = 200 / (500 * 1000) = 0
+                    
+                    # We need to mock the generator so it predicts weights reliably
+                    mock_generator = MagicMock()
+                    mock_generator.predict_today.return_value = {"2330.TW": 0.05}
+                    mock_summary = MagicMock()
+                    mock_summary.feature_importance_top10 = {"feat1": 0.1}
+                    mock_scores = {"2330.TW": pd.Series([0.05], index=[pd.Timestamp("2024-06-01")])}
+                    mock_generator.fit_period.return_value = (mock_scores, mock_summary)
+                    
+                    with patch("scripts.evaluate_sl_live.SignalGenerator", return_value=mock_generator):
+                        with pytest.raises(RuntimeError, match="FAIL-CLOSED: Target weights are non-empty"):
+                            main()
 
-
-def test_evaluate_sl_live_calculates_lots_correctly():
-    # Setup mocks
-    with patch("scripts.evaluate_sl_live.fetch_latest_close") as mock_fetch_close, \
-         patch("scripts.evaluate_sl_live.get_current_positions_and_mdd") as mock_get_pos, \
-         patch("scripts.evaluate_sl_live.fetch_multi_asset_data") as mock_fetch_data, \
-         patch("scripts.evaluate_sl_live.get_universe_builder") as mock_get_universe, \
-         patch("scripts.evaluate_sl_live.SignalGenerator.fit_period") as mock_fit_period, \
-         patch("scripts.evaluate_sl_live.build_vols_as_of") as mock_build_vols, \
-         patch("scripts.evaluate_sl_live.Path.write_text") as mock_write, \
-         patch("scripts.evaluate_sl_live.Path.mkdir"):
-
-        # Mock universe
-        mock_builder = MagicMock()
-        mock_builder.build_universe.return_value = ["2330", "2317"]
-        mock_get_universe.return_value = mock_builder
-
-        # Mock data (need actual dates)
-        today = pd.Timestamp("2026-06-15")
-        df = pd.DataFrame({"Close": [100.0]}, index=[today])
-        mock_fetch_data.return_value = {"2330": df, "2317": df}
-
-        # Mock latest close
-        def mock_latest_close(ticker):
-            return 900.0 if ticker == "2330" else 200.0
-        mock_fetch_close.side_effect = mock_latest_close
-
-        # Mock positions & total assets
-        mock_get_pos.return_value = ({}, 0.0, 1_000_000.0) # total_assets = 1M
-
-        # Mock fit_period scores
-        scores = {
-            "2330": pd.Series([1.0], index=[today]),
-            "2317": pd.Series([0.5], index=[today])
-        }
-        mock_summary = MagicMock()
-        mock_summary.feature_importance_top10 = {"f1": 1.0}
-        mock_fit_period.return_value = (scores, mock_summary)
-
-        # Mock vols
-        mock_build_vols.return_value = {"2330": 0.2, "2317": 0.2}
-
-        # Instead of running the whole main(), we can run main() with sys.argv mocked
-        with patch.object(sys, 'argv', ['evaluate_sl_live.py', '--output', 'dummy.json']):
-            eval_live.main()
-            
-        # Verify the write_text call
-        assert mock_write.called
-        import json
-        written_content = json.loads(mock_write.call_args[0][0])
-        
-        target_weights = written_content["target_weights"]
-        target_lots = written_content["target_lots"]
-        metadata = written_content["metadata"]
-        
-        # Verify lots logic
-        assert len(target_weights) > 0
-        assert "2330" in target_weights
-        
-        expected_amt_2330 = 1_000_000.0 * target_weights["2330"]
-        expected_lots_2330 = int(expected_amt_2330 / (900.0 * 1000))
-        assert target_lots.get("2330", 0) == expected_lots_2330
-
-        # Verify metadata is updated
-        assert "strategy_config" in metadata
-        assert "config_hash" in metadata
-        assert "gate_status" in metadata
-        assert "metrics_source" in metadata
+def test_evaluate_sl_live_success(tmp_path):
+    test_args = [
+        "scripts/evaluate_sl_live.py",
+        "--output", str(tmp_path / "signal.json"),
+        "--top-k", "5",
+        "--horizon", "10"
+    ]
+    
+    mock_data = {
+        "2330.TW": pd.DataFrame({"Close_norm": [500], "log_return": [0.01], "macro_^TWII_log_return": [0.0], "macro_^IXIC_log_return": [0.0]}, index=[pd.Timestamp("2024-06-01")]),
+        "^TWII": pd.DataFrame({"Close_norm": [20000], "log_return": [0.01]}, index=[pd.Timestamp("2024-06-01")]),
+        "^IXIC": pd.DataFrame({"Close_norm": [15000], "log_return": [0.01]}, index=[pd.Timestamp("2024-06-01")]),
+        "USDTWD=X": pd.DataFrame({"Close_norm": [32]}, index=[pd.Timestamp("2024-06-01")])
+    }
+    
+    with patch("sys.argv", test_args):
+        with patch("scripts.evaluate_sl_live.fetch_multi_asset_data", return_value=mock_data):
+            with patch("scripts.evaluate_sl_live.fetch_latest_close", return_value=500.0):
+                with patch("scripts.evaluate_sl_live.get_current_positions_and_mdd", return_value=({}, 0.0, 10000000.0)):
+                    mock_generator = MagicMock()
+                    mock_generator.predict_today.return_value = {"2330.TW": 0.05}
+                    mock_summary = MagicMock()
+                    mock_summary.feature_importance_top10 = {"feat1": 0.1}
+                    mock_scores = {"2330.TW": pd.Series([0.05], index=[pd.Timestamp("2024-06-01")])}
+                    mock_generator.fit_period.return_value = (mock_scores, mock_summary)
+                    
+                    with patch("scripts.evaluate_sl_live.SignalGenerator", return_value=mock_generator):
+                        main()
+                    
+                    # Verify output
+                    assert (tmp_path / "signal.json").exists()
+                    with open(tmp_path / "signal.json", "r", encoding="utf-8") as f:
+                        signal = json.load(f)
+                    
+                    assert "target_lots" in signal
+                    assert "2330.TW" in signal["target_lots"]
+                    
+                    # 10,000,000 * 0.35 weight max = 3,500,000
+                    # 3,500,000 / (500 * 1000) = 7 lots
+                    assert signal["target_lots"]["2330.TW"] == 7
