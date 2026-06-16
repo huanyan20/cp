@@ -1,0 +1,299 @@
+如果是基於我們前面討論的方向（SL + RL + Portfolio + Capital Flow），那我認為你現在**不要再增加模型種類**，而是進入「研究框架收斂階段」。
+
+目前最大的風險不是模型不夠強，而是：
+
+> 你可能同時研究太多東西，最後無法知道到底是哪個模組產生 Alpha。
+
+---
+
+# 我會把下一階段拆成 4 個 Milestone
+
+## Milestone 1：建立不可動搖的 Baseline
+
+這是最優先。
+
+你現在需要回答：
+
+### 問題
+
+如果完全不用 RL：
+
+* Buy & Hold
+* Equal Weight Portfolio
+* Momentum
+* Mean Reversion
+
+這些策略的績效是多少？
+
+例如：
+
+| Strategy | CAGR | Sharpe | MDD  |
+| -------- | ---- | ------ | ---- |
+| Buy Hold | 12%  | 0.7    | -45% |
+| Momentum | 18%  | 1.0    | -32% |
+| SL       | ?    | ?      | ?    |
+| RL       | ?    | ?      | ?    |
+
+很多交易研究死掉的原因：
+
+RL 贏不了最簡單的 Momentum。
+
+---
+
+## Milestone 2：驗證 Capital Flow 是否真的有訊號
+
+這其實是整個專案最重要的科學問題。
+
+不要先訓練 RL。
+
+先做：
+
+### IC Test
+
+Information Coefficient
+
+測試：
+
+```text
+Capital Flow(t)
+
+vs
+
+Future Return(t+5)
+Future Return(t+10)
+Future Return(t+20)
+```
+
+計算：
+
+```python
+spearmanr(
+    capital_flow,
+    future_return
+)
+```
+
+看看：
+
+```text
+IC = 0.02
+IC = 0.05
+IC = 0.08
+```
+
+差很多。
+
+---
+
+如果：
+
+```text
+IC ≈ 0
+```
+
+代表：
+
+資金流本身沒訊號
+
+那就不值得把整個系統建立在它上面。
+
+---
+
+## Milestone 3：先完成 SL
+
+我甚至建議：
+
+### 暫停 RL
+
+先完成：
+
+```text
+Feature
+↓
+SL
+↓
+Signal
+↓
+Backtest
+```
+
+例如：
+
+Feature:
+
+* Return
+* Volume
+* ATR
+* Capital Flow
+
+Label:
+
+```text
+future_10d_return > 5%
+```
+
+模型：
+
+* LightGBM
+* XGBoost
+
+先看：
+
+```text
+Top10%
+Top20%
+Top30%
+```
+
+選股效果。
+
+---
+
+如果：
+
+SL 都找不到 Alpha
+
+RL 通常也不會突然找到。
+
+因為 RL 最終也是建立在同樣市場資料上。
+
+---
+
+## Milestone 4：再做 RL
+
+到這一步才值得投入。
+
+此時：
+
+SL 已經能產生：
+
+```text
+P(up)
+Expected Return
+Confidence
+```
+
+然後 RL 的 state：
+
+```python
+state = [
+    cash,
+    holdings,
+    volatility,
+    SL_score,
+    capital_flow_score
+]
+```
+
+action：
+
+```python
+buy
+sell
+hold
+position_size
+```
+
+這樣 RL 的工作變成：
+
+> 如何配置資金
+
+而不是
+
+> 從雜訊中發現 Alpha
+
+難度差很多。
+
+---
+
+# 我認為目前專案最缺的東西
+
+不是模型。
+
+而是：
+
+## Research Dashboard
+
+建立：
+
+```text
+reports/
+```
+
+裡面固定輸出：
+
+### Signal Report
+
+* IC
+* Rank IC
+* Hit Rate
+
+### Strategy Report
+
+* CAGR
+* Sharpe
+* Sortino
+* MDD
+
+### Trading Report
+
+* Win Rate
+* Avg Holding Days
+* Turnover
+
+### Walk Forward Report
+
+每個 Fold：
+
+```text
+Train
+Validation
+Test
+```
+
+結果全部保存。
+
+---
+
+# 如果是我
+
+我接下來 2~4 週只做一件事：
+
+```text
+驗證 Capital Flow 是否真的提供 Alpha
+```
+
+具體順序：
+
+```text
+1. 建立 Baseline
+2. 做 IC Analysis
+3. 做 Feature Importance
+4. 完成 SL Ranking
+5. Walk Forward
+6. RL
+```
+
+而不是：
+
+```text
+再加 PPO
+再加 SAC
+再加 Transformer
+再加 LSTM
+```
+
+因為目前最大的未知數其實不是演算法，而是：
+
+> 你的特徵（尤其是 Capital Flow）到底有沒有足夠的可交易訊號，值得後面投入大量 RL 開發成本。
+
+---
+
+# 執行結果 (2026-06-16 紀錄)
+
+根據上述計畫，Milestone 1 與 Milestone 2 的測試數據已正式產出。
+詳細結果與結論已完整記錄於 `reports/Milestone_1_2_Report.md` 中。
+
+**核心結論：**
+1. **Capital Flow 無顯著訊號**：Rank IC 接近 0 (0.001 ~ 0.005)。
+2. **Momentum 碾壓現有模型**：最簡單的 Momentum Top 5 策略 (Sortino 2.45, MDD 27%) 遠勝原本的 SL+RL 模型。完全印證了本計畫「回歸基礎、特徵驗證優先」的方向。

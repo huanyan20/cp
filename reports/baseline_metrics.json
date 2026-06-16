@@ -1,0 +1,23 @@
+[
+  {
+    "Strategy":"Buy & Hold (^TWII)",
+    "CAGR(%)":0.0,
+    "MDD(%)":0.0,
+    "Sortino":0.0,
+    "Sharpe":0.0
+  },
+  {
+    "Strategy":"Equal Weight (Univ 45)",
+    "CAGR(%)":88.2404216969,
+    "MDD(%)":21.7972112296,
+    "Sortino":1.8977491118,
+    "Sharpe":1.3202820661
+  },
+  {
+    "Strategy":"Momentum Top 5",
+    "CAGR(%)":377.8711313811,
+    "MDD(%)":27.4221780966,
+    "Sortino":2.4548860641,
+    "Sharpe":1.542969046
+  }
+]
