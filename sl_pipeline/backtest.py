@@ -649,8 +649,9 @@ def sl_metrics_path(
     horizon: int,
     seed: int,
     allocator: str = "rule",
+    risk_name: str = "v2_mdd_patch",
 ) -> Path:
-    return results_dir / f"metrics_sl_{allocator}_h{horizon}_seed{seed}.json"
+    return results_dir / f"metrics_sl_{allocator}_h{horizon}_{risk_name}_seed{seed}.json"
 
 
 def persist_sl_metrics(metrics: dict, path: Path) -> Path:

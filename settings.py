@@ -73,7 +73,7 @@ class ResearchSettings(BaseSettings):
     torch_device: str = Field("auto", validation_alias="RESEARCH_DEVICE")
 
     # SL strategy specific settings
-    sl_target_vol: float = Field(0.12, validation_alias="RESEARCH_SL_TARGET_VOL")
+    sl_target_vol: float = Field(0.15, validation_alias="RESEARCH_SL_TARGET_VOL")
     sl_trailing_stop: float = Field(0.15, validation_alias="RESEARCH_SL_TRAILING_STOP")
 
     # Non-prefixed env vars (aliased explicitly)
@@ -125,7 +125,7 @@ class LiveSettings(BaseSettings):
 class RiskLimits(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MAX_", env_file=".env", extra="ignore")
     
-    single_weight: float = Field(0.35, validation_alias="MAX_SINGLE_WEIGHT")
+    single_weight: float = Field(0.25, validation_alias="MAX_SINGLE_WEIGHT")
     total_exposure: float = Field(1.0, validation_alias="MAX_TOTAL_EXPOSURE")
     leverage: float = Field(2.0, validation_alias="MAX_LEVERAGE")
     turnover: float = Field(0.30, validation_alias="MAX_TURNOVER")

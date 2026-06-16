@@ -15,6 +15,46 @@ from sl_pipeline.allocator import (
 
 
 @dataclass(frozen=True)
+class RiskConfig:
+    name: str
+    vol_target: float
+    yellow_mdd: float
+    yellow_max_exposure: float
+    red_mdd: float
+    red_max_exposure: float
+    max_single_weight: float
+    weight_band: float = 0.05
+    top_k_hold: int = 10
+    top_k: int = 5
+    recovery_buffer: float = 0.02
+    annualization: int = 252
+    vol_lookback: int = 20
+
+RISK_V1 = RiskConfig(
+    name="v1_baseline",
+    vol_target=0.18, yellow_mdd=0.10, yellow_max_exposure=0.50,
+    red_mdd=0.15,    red_max_exposure=0.10, max_single_weight=0.35,
+)
+
+RISK_V2 = RiskConfig(
+    name="v2_mdd_patch",
+    vol_target=0.15,
+    yellow_mdd=0.07,
+    yellow_max_exposure=0.50,
+    red_mdd=0.12,
+    red_max_exposure=0.10,
+    max_single_weight=0.28,
+)
+
+RISK_V2B = RiskConfig(
+    name="v2b_conservative",
+    vol_target=0.15, yellow_mdd=0.08, yellow_max_exposure=0.50,
+    red_mdd=0.13,    red_max_exposure=0.10, max_single_weight=0.28,
+)
+
+RISK_CONFIGS: dict[str, RiskConfig] = {"v1": RISK_V1, "v2": RISK_V2, "v2b": RISK_V2B}
+
+@dataclass(frozen=True)
 class RuleBasedAllocatorConfig:
     top_k: int = 5
     hysteresis_rank: int = 10
@@ -23,28 +63,34 @@ class RuleBasedAllocatorConfig:
     target_vol_annual: float = 0.15
     vol_floor: float = 0.05
     enable_trend_filter: bool = True
-    weighting_method: str = "equal"  # 'inv_vol', 'equal', or 'abs_vol_parity'
-    yellow_mdd: float = 0.20
+    weighting_method: str = "equal"
+    yellow_mdd: float = 0.08
     yellow_max_exposure: float = 0.50
-    red_mdd: float = 0.35
+    red_mdd: float = 0.13
     red_max_exposure: float = 0.0
-    max_single_weight: float = 0.20
+    max_single_weight: float = 0.25
     min_score: float = 0.005
     enable_momentum_scaling: bool = False
     momentum_scale_factor: float = 5.0
-
     enable_trailing_stop: bool = True
     trailing_stop_threshold: float = 0.15
     cooldown_duration: int = 10
     enable_ma_filter: bool = True
     ma_filter_windows: list[int] = field(default_factory=lambda: [20])
-
-
 class RuleBasedAllocator(PortfolioAllocator):
-    """Top-K + inv-vol + 18% vol-target + tiered MDD + turnover hysteresis."""
+    """Top-K + inv-vol + 15% vol-target + tiered MDD + turnover hysteresis."""
 
-    def __init__(self, config: RuleBasedAllocatorConfig | None = None) -> None:
+    def __init__(self, risk_config: RiskConfig = RISK_V2, config: RuleBasedAllocatorConfig | None = None) -> None:
+        self.cfg = risk_config
         self.config = config or RuleBasedAllocatorConfig()
+        self._regime_state = "normal"
+        
+    @property
+    def config_name(self) -> str:
+        return self.cfg.name
+        
+    def reset_regime(self) -> None:
+        self._regime_state = "normal"""
 
     def allocate(
         self,
@@ -58,6 +104,7 @@ class RuleBasedAllocator(PortfolioAllocator):
     ) -> TargetPortfolio:
         """Allocate based on rules + Abs Vol Parity."""
         cfg = self.config
+        risk_cfg = self.cfg
         if not scores:
             return TargetPortfolio(target_weights={}, cash_weight=1.0)
 
@@ -121,12 +168,12 @@ class RuleBasedAllocator(PortfolioAllocator):
 
         selected_sorted = valid_tickers
 
-        effective_target_vol = cfg.target_vol_annual
+        effective_target_vol = risk_cfg.vol_target
         if market_context and market_context.market_volatility is not None:
             if market_context.market_volatility > 0.20:
                 # Compress target vol during high market turbulence (VIX/TWII vol > 20%)
                 vol_scaler = 0.20 / market_context.market_volatility
-                effective_target_vol = cfg.target_vol_annual * max(0.5, vol_scaler)
+                effective_target_vol = risk_cfg.vol_target * max(0.5, vol_scaler)
 
         raw_weights: dict[str, float] = {}
         if cfg.weighting_method == "equal":
@@ -160,7 +207,7 @@ class RuleBasedAllocator(PortfolioAllocator):
                     scaler = max(0.0, 1.0 + st * cfg.momentum_scale_factor)
                     raw_weights[ticker] *= scaler
 
-        raw_weights = self._cap_single_names(raw_weights, cfg.max_single_weight)
+        raw_weights = self._apply_single_cap(raw_weights)
         if cfg.weighting_method != "abs_vol_parity":
             raw_weights = self._renormalize(raw_weights)
 
@@ -169,21 +216,22 @@ class RuleBasedAllocator(PortfolioAllocator):
             portfolio_vol = self._estimate_portfolio_vol(raw_weights, vols, cfg.vol_floor)
             exposure = min(1.0, effective_target_vol / max(portfolio_vol, cfg.vol_floor))
             
-        exposure = self._apply_mdd_cap(exposure, state.rolling_mdd, cfg)
+        regime, exposure_cap = self._regime_exposure_cap(state.rolling_mdd)
+        exposure = min(exposure, exposure_cap)
         exposure = self._apply_macro_cap(exposure, market_context)
 
         if exposure <= 1e-4:
             return TargetPortfolio(target_weights={}, cash_weight=1.0)
 
         stock_weights = {ticker: weight * exposure for ticker, weight in raw_weights.items()}
-        stock_weights = self._cap_single_names(stock_weights, cfg.max_single_weight)
+        stock_weights = self._apply_single_cap(stock_weights)
         stock_total = sum(stock_weights.values())
         if stock_total > exposure + 1e-8:
             scale = exposure / stock_total
             stock_weights = {ticker: weight * scale for ticker, weight in stock_weights.items()}
 
-        stock_weights = self._apply_weight_hysteresis(stock_weights, state.positions, cfg.weight_band)
-        stock_weights = self._cap_single_names(stock_weights, cfg.max_single_weight)
+        stock_weights = self._apply_weight_band(stock_weights, state.positions)
+        stock_weights = self._apply_single_cap(stock_weights)
         stock_total = sum(stock_weights.values())
         cash_weight = max(0.0, 1.0 - stock_total)
 
@@ -216,17 +264,29 @@ class RuleBasedAllocator(PortfolioAllocator):
             )
         )
 
-    @staticmethod
-    def _apply_mdd_cap(
-        exposure: float,
-        rolling_mdd: float,
-        cfg: RuleBasedAllocatorConfig,
-    ) -> float:
+    def _regime_exposure_cap(self, rolling_mdd: float) -> tuple[str, float]:
+        cfg = self.cfg
+        buf = cfg.recovery_buffer
         if rolling_mdd >= cfg.red_mdd:
-            return min(exposure, cfg.red_max_exposure)
-        if rolling_mdd >= cfg.yellow_mdd:
-            return min(exposure, cfg.yellow_max_exposure)
-        return min(exposure, 1.0)
+            self._regime_state = "red"
+        elif rolling_mdd >= cfg.yellow_mdd:
+            if self._regime_state == "red":
+                if rolling_mdd < cfg.red_mdd - buf:
+                    self._regime_state = "yellow"
+            else:
+                self._regime_state = "yellow"
+        else:
+            if self._regime_state in ("yellow", "red"):
+                if rolling_mdd < cfg.yellow_mdd - buf:
+                    self._regime_state = "normal"
+            else:
+                self._regime_state = "normal"
+
+        if self._regime_state == "red":
+            return "red", cfg.red_max_exposure
+        elif self._regime_state == "yellow":
+            return "yellow", cfg.yellow_max_exposure
+        return "normal", 1.0
 
     @staticmethod
     def _apply_macro_cap(
@@ -247,19 +307,33 @@ class RuleBasedAllocator(PortfolioAllocator):
             
         return exposure
 
-    @staticmethod
-    def _apply_weight_hysteresis(
-        target_weights: dict[str, float],
-        current_positions: dict[str, float],
-        weight_band: float,
-    ) -> dict[str, float]:
-        adjusted: dict[str, float] = {}
-        tickers = set(target_weights) | set(current_positions)
-        for ticker in tickers:
-            target = float(target_weights.get(ticker, 0.0))
-            current = float(current_positions.get(ticker, 0.0))
-            if current > 1e-4 and abs(target - current) < weight_band:
-                adjusted[ticker] = current
-            elif target > 1e-4:
-                adjusted[ticker] = target
-        return {ticker: weight for ticker, weight in adjusted.items() if weight > 1e-4}
+    def _apply_weight_band(self, target: dict, current: dict) -> dict:
+        band = self.cfg.weight_band
+        result = {}
+        for t, tw in target.items():
+            cw = float(current.get(t, 0.0))
+            tw = float(tw)
+            if cw > 1e-4 and abs(tw - cw) < band:
+                result[t] = cw
+            elif tw > 1e-4:
+                result[t] = tw
+        return result
+
+    def _apply_single_cap(self, weights: dict) -> dict:
+        cap = self.cfg.max_single_weight
+        w = dict(weights)
+        for _ in range(5):
+            overflow = {t: v - cap for t, v in w.items() if v > cap}
+            if not overflow:
+                break
+            excess = sum(overflow.values())
+            for t in overflow:
+                w[t] = cap
+            under = [t for t in w if w[t] < cap]
+            if not under:
+                break
+            per_stock = excess / len(under)
+            for t in under:
+                w[t] = min(cap, w[t] + per_stock)
+        return w
+

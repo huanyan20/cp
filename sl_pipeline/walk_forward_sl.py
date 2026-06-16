@@ -28,6 +28,8 @@ from sl_pipeline.candidate import current_candidate_metadata
 from sl_pipeline.rule_based_allocator import (
     RuleBasedAllocator,
     RuleBasedAllocatorConfig,
+    RISK_CONFIGS,
+    RISK_V2,
 )
 from sl_pipeline.signal_generator import (
     DEFAULT_LGBM_PARAMS,
@@ -52,15 +54,17 @@ def resolve_period(name: str) -> dict:
     return period
 
 
-def build_allocator(name: str) -> RuleBasedAllocator:
+def build_allocator(name: str, risk_config_key: str = "v2") -> RuleBasedAllocator:
     key = (name or "rule").strip().lower()
     if key != "rule":
         raise ValueError(
             f"Unsupported allocator {name!r}; only 'rule' is implemented in S2."
         )
     default_config = RuleBasedAllocatorConfig()
+    risk_cfg = RISK_CONFIGS.get(risk_config_key, RISK_V2)
     return RuleBasedAllocator(
-        RuleBasedAllocatorConfig(
+        risk_config=risk_cfg,
+        config=RuleBasedAllocatorConfig(
             top_k=SETTINGS.research.default_topk,
             max_single_weight=min(
                 SETTINGS.risk_limits.max_single_weight,
@@ -77,6 +81,7 @@ def run_single_period(
     *,
     horizon: int = 5,
     allocator_name: str | None = None,
+    risk_config_key: str = "v2",
     seed: int = 42,
     output_dir: Path | None = None,
     tickers: list[str] | None = None,
@@ -147,8 +152,9 @@ def run_single_period(
     }
 
     if allocator_name:
-        allocator = build_allocator(allocator_name)
+        allocator = build_allocator(allocator_name, risk_config_key)
         combined_test = {**train_data, **test_data}
+        allocator.reset_regime()
         backtest = simulate_period(
             combined_test,
             scores,
@@ -185,8 +191,10 @@ def run_single_period(
             seed_metrics["periods"][period_name] = period_metrics
             seed_metrics["overall"] = period_metrics
             out_results = results_dir or SETTINGS.paths.results_dir
+            seed_metrics["variant"] = f"sl_rule_h{horizon}_{allocator.config_name}"
+            seed_metrics["risk_config"] = allocator.config_name
             path = sl_metrics_path(
-                out_results, horizon=horizon, seed=seed, allocator=allocator_name
+                out_results, horizon=horizon, seed=seed, allocator=allocator_name, risk_name=allocator.config_name
             )
             write_metrics_json(seed_metrics, str(path))
             result["metrics_path"] = str(path)
@@ -202,6 +210,7 @@ def run_walk_forward_sl(
     *,
     horizon: int = 5,
     allocator_name: str = "rule",
+    risk_config_key: str = "v2",
     seed: int = 42,
     output_dir: Path | None = None,
     tickers: list[str] | None = None,
@@ -209,7 +218,7 @@ def run_walk_forward_sl(
     run_gate: bool = False,
 ) -> dict:
     plan = build_period_plan()
-    allocator = build_allocator(allocator_name)
+    allocator = build_allocator(allocator_name, risk_config_key)
     if tickers is None:
         builder = get_universe_builder("dynamic")
         # Initialize default but dynamically update per period if requested
@@ -291,6 +300,7 @@ def run_walk_forward_sl(
             "test_start": period["test_start"],
             "test_end": test_end,
         })
+        allocator.reset_regime()
         backtest = simulate_period(
             combined_test,
             scores,
@@ -339,8 +349,10 @@ def run_walk_forward_sl(
     seed_metrics["overall"] = overall_metrics
 
     out_results = results_dir or SETTINGS.paths.results_dir
+    seed_metrics["variant"] = f"sl_rule_h{horizon}_{allocator.config_name}"
+    seed_metrics["risk_config"] = allocator.config_name
     path = sl_metrics_path(
-        out_results, horizon=horizon, seed=seed, allocator=allocator_name
+        out_results, horizon=horizon, seed=seed, allocator=allocator_name, risk_name=allocator.config_name
     )
     write_metrics_json(seed_metrics, str(path))
 
@@ -509,6 +521,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--allocator", default=None, help="S2: rule-based allocator (use 'rule')"
     )
+    parser.add_argument(
+        "--risk-config",
+        default="v2",
+        choices=["v1", "v2", "v2b"],
+        help="Risk Config (v1/v2/v2b)"
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument(
@@ -533,6 +551,7 @@ def main(argv: list[str] | None = None) -> int:
             args.period,
             horizon=args.horizon,
             allocator_name=args.allocator,
+            risk_config_key=args.risk_config,
             seed=args.seed,
             output_dir=out,
             write_metrics=args.write_metrics or args.allocator is not None,
