@@ -5,21 +5,20 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from data_pipeline.utils import build_feature_schema
+from data_pipeline.utils import BASE_FEATURE_COLS
 
-HORIZON_DAYS = (5, 10)
+HORIZON_DAYS = (5, 10, 20, 60)
 
 
 def label_column_name(horizon: int) -> str:
     if horizon not in HORIZON_DAYS:
         raise ValueError(f"Unsupported horizon {horizon}; expected one of {HORIZON_DAYS}")
-    return f"target_{horizon}d_cross_demean"
+    return f"target_{horizon}d_class"
 
 
-def default_feature_columns(macro_feature_cols: list[str] | None = None) -> list[str]:
-    """Feature columns aligned with base RL observation (no overnight, no ticker id)."""
-    schema = build_feature_schema(macro_features=tuple(macro_feature_cols or ()))
-    return list(schema.columns)
+def default_feature_columns() -> list[str]:
+    """Feature columns aligned with Milestone 3A."""
+    return list(BASE_FEATURE_COLS)
 
 
 def forward_log_return_t1(log_return: pd.Series, end_day: int) -> pd.Series:
@@ -41,34 +40,48 @@ def forward_log_return_t1(log_return: pd.Series, end_day: int) -> pd.Series:
     return pd.Series(out, index=log_return.index, name=f"raw_{end_day}d_return_t1")
 
 
-def build_cross_demean_frame(
+def build_classification_label_frame(
     enriched: dict[str, pd.DataFrame],
     horizon: int,
 ) -> pd.DataFrame:
-    """Wide frame of cross-demeaned forward returns, filtered to top quantile."""
+    """Wide frame of 3-class forward returns."""
     raw = {
         ticker: forward_log_return_t1(df["log_return"], horizon)
         for ticker, df in enriched.items()
     }
     raw_df = pd.DataFrame(raw)
-    median = raw_df.median(axis=1, skipna=True)
-    demeaned = raw_df.sub(median, axis=0)
-    
-    # Only keep the signal if it's in the top 20% AND it's positive
     rank = raw_df.rank(axis=1, pct=True)
-    valid = (rank >= 0.80) & (demeaned > 0.0)
-    return demeaned.where(valid, 0.0)
+    
+    # 3-class classification
+    # 2: Top 20%
+    # 1: Middle 60%
+    # 0: Bottom 20%
+    classes = pd.DataFrame(np.nan, index=raw_df.index, columns=raw_df.columns)
+    classes[rank >= 0.80] = 2.0
+    classes[(rank < 0.80) & (rank > 0.20)] = 1.0
+    classes[rank <= 0.20] = 0.0
+    
+    return classes
+
+
+def _add_cross_sectional_ranks(panel: pd.DataFrame, base_cols: list[str]) -> pd.DataFrame:
+    """Add rank columns for all base features."""
+    for col in base_cols:
+        if col in panel.columns and col != "log_return":
+            rank_col_name = f"rank_{col}"
+            panel[rank_col_name] = panel.groupby("date")[col].rank(pct=True)
+    return panel
 
 
 def build_labeled_panel(
     enriched: dict[str, pd.DataFrame],
-    horizon: int = 5,
+    horizon: int = 20,
     feature_cols: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Long panel: one row per (date, ticker) with features + cross-demean label."""
+    """Long panel: one row per (date, ticker) with features + classification label."""
     feature_cols = feature_cols or default_feature_columns()
     label_col = label_column_name(horizon)
-    cross_demean = build_cross_demean_frame(enriched, horizon)
+    label_frame = build_classification_label_frame(enriched, horizon)
 
     frames: list[pd.DataFrame] = []
     for ticker, df in enriched.items():
@@ -78,11 +91,13 @@ def build_labeled_panel(
         part = df[feature_cols].copy()
         part["ticker"] = ticker
         part["date"] = df.index
-        part[label_col] = cross_demean[ticker].reindex(df.index).values
+        part[label_col] = label_frame[ticker].reindex(df.index).values
         frames.append(part.reset_index(drop=True))
 
     panel = pd.concat(frames, ignore_index=True)
-    return panel.dropna(subset=[label_col]).sort_values(["date", "ticker"]).reset_index(drop=True)
+    panel = panel.dropna(subset=[label_col]).sort_values(["date", "ticker"]).reset_index(drop=True)
+    panel = _add_cross_sectional_ranks(panel, feature_cols)
+    return panel
 
 
 def build_feature_panel(
@@ -97,7 +112,10 @@ def build_feature_panel(
         part["ticker"] = ticker
         part["date"] = df.index
         frames.append(part.reset_index(drop=True))
-    return pd.concat(frames, ignore_index=True).sort_values(["date", "ticker"]).reset_index(drop=True)
+        
+    panel = pd.concat(frames, ignore_index=True).sort_values(["date", "ticker"]).reset_index(drop=True)
+    panel = _add_cross_sectional_ranks(panel, feature_cols)
+    return panel
 
 
 def split_panel_by_date(

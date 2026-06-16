@@ -101,23 +101,26 @@ def main():
         ew_ret = test_panel.groupby('date')['simple_ret'].mean()
         ew_metrics = evaluate_returns(ew_ret)
         
-        # 3. Momentum (Top 5)
+        strategies = [("Buy & Hold (^TWII)", mkt_metrics), 
+                      ("Equal Weight (Univ 45)", ew_metrics)]
+        
+        # 3. Momentum (Top N variants)
         panel['mom_20_lag'] = panel.groupby('ticker')['mom_20'].shift(1)
         test_panel_mom = panel[(panel['date'] >= pd.to_datetime(test_start)) & (panel['date'] <= pd.to_datetime(test_end))]
         
-        def top_k_ret(group, k=5):
-            valid = group.dropna(subset=['mom_20_lag'])
-            if len(valid) == 0:
-                return 0.0
-            top = valid.nlargest(k, 'mom_20_lag')
-            return top['simple_ret'].mean()
-            
-        mom_ret = test_panel_mom.groupby('date').apply(top_k_ret)
-        mom_metrics = evaluate_returns(mom_ret)
+        for k in [5, 10, 20, 30]:
+            def top_k_ret(group, top_n=k):
+                valid = group.dropna(subset=['mom_20_lag'])
+                if len(valid) == 0:
+                    return 0.0
+                top = valid.nlargest(top_n, 'mom_20_lag')
+                return top['simple_ret'].mean()
+                
+            mom_ret = test_panel_mom.groupby('date').apply(top_k_ret)
+            mom_metrics = evaluate_returns(mom_ret)
+            strategies.append((f"Momentum Top {k}", mom_metrics))
         
-        for strat, metrics in [("Buy & Hold (^TWII)", mkt_metrics), 
-                               ("Equal Weight (Univ 45)", ew_metrics), 
-                               ("Momentum Top 5", mom_metrics)]:
+        for strat, metrics in strategies:
             res = {"Period": name, "Strategy": strat}
             res.update(metrics)
             results.append(res)

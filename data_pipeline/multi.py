@@ -72,51 +72,9 @@ def fetch_multi_asset_data(
     if len(lr_aligned) < window_size * 2:
         print("[!] 警告：對齊後資料筆數偏少，建議擴展日期範圍。")
 
-    cumret_5d = {t: lr_aligned[t].rolling(5).sum() for t in available}
-    avg_5d = pd.DataFrame(cumret_5d).mean(axis=1)
-
-    sector_vol_dict: dict[str, pd.Series] = {}
-    for sector_name, sector_tickers in SECTOR_GROUPS.items():
-        sector_avail = [t for t in sector_tickers if t in available]
-        if sector_avail:
-            vols = pd.DataFrame(
-                {t: raw_dfs[t]["Volume_norm"].reindex(lr_aligned.index) for t in sector_avail}
-            )
-            sector_vol_dict[sector_name] = vols.sum(axis=1)
-
     enriched = {}
     for ticker in available:
-        peers = [t for t in available if t != ticker]
         df = raw_dfs[ticker].reindex(lr_aligned.index).copy()
-
-        df["peer1_logret"] = lr_aligned[peers[0]].values
-        df["peer2_logret"] = lr_aligned[peers[1]].values if len(peers) > 1 else 0.0
-
-        self_lr = lr_aligned[ticker]
-        df["corr_peer1_20d"] = self_lr.rolling(20).corr(lr_aligned[peers[0]]).values
-        df["corr_peer2_20d"] = (
-            self_lr.rolling(20).corr(lr_aligned[peers[1]]).values if len(peers) > 1 else 0.0
-        )
-
-        df["rel_strength"] = (cumret_5d[ticker] - avg_5d).values
-
-        sector_name = get_ticker_sector(ticker)
-        own_vol = raw_dfs[ticker]["Volume_norm"].reindex(lr_aligned.index)
-        if sector_name in sector_vol_dict:
-            sec_total = sector_vol_dict[sector_name]
-            sec_share = own_vol / sec_total.replace(0, 1e-8)
-            share_mean = sec_share.rolling(20, min_periods=5).mean()
-            share_std = sec_share.rolling(20, min_periods=5).std().replace(0, 1.0)
-            df["sector_flow"] = (
-                (((sec_share - share_mean) / share_std).clip(-3.0, 3.0) / 3.0)
-                .reindex(df.index)
-                .fillna(0.0)
-            )
-        else:
-            df["sector_flow"] = 0.0
-
-        advancers = pd.DataFrame({t: raw_dfs[t]["Close_norm"].reindex(lr_aligned.index) > 0 for t in available}).sum(axis=1)
-        df["market_breadth"] = (advancers / len(available)).values
 
         if macro_dfs:
             for m_tick, m_df in macro_dfs.items():

@@ -149,14 +149,40 @@ def fetch_and_process_data(
     else:
         df["MFI_norm"] = 0.5
 
-    # v8.0 新增動能特徵
-    ma60 = df["Close"].rolling(60).mean()
-    df["ma60_bias"] = (df["Close"] - ma60) / ma60.replace(0, np.nan)
-
-    df["mom_60d_raw"] = df["log_return"].rolling(60).sum()
-    mom_mean = df["mom_60d_raw"].rolling(252, min_periods=60).mean()
-    mom_std = df["mom_60d_raw"].rolling(252, min_periods=60).std().replace(0, 1.0)
-    df["mom_60d"] = ((df["mom_60d_raw"] - mom_mean) / mom_std).clip(-3.0, 3.0) / 3.0
+    # === Milestone 3A: Feature Zoo Generation ===
+    # Group 1: Momentum Family
+    df["ret_5d"] = df["log_return"].rolling(5).sum()
+    df["ret_10d"] = df["log_return"].rolling(10).sum()
+    df["ret_20d"] = df["log_return"].rolling(20).sum()
+    df["ret_60d"] = df["log_return"].rolling(60).sum()
+    
+    df["price_ma20_ratio"] = df["Close"] / df["Close"].rolling(20).mean()
+    df["price_ma60_ratio"] = df["Close"] / df["Close"].rolling(60).mean()
+    df["price_ma120_ratio"] = df["Close"] / df["Close"].rolling(120).mean()
+    
+    # Group 2: Volatility Family
+    tr_series = df["High"] - df["Low"]
+    tr2_series = (df["High"] - df["Close"].shift()).abs()
+    tr3_series = (df["Low"] - df["Close"].shift()).abs()
+    true_range = pd.concat([tr_series, tr2_series, tr3_series], axis=1).max(axis=1)
+    
+    df["atr_20"] = true_range.rolling(20).mean() / df["Close"]
+    df["atr_60"] = true_range.rolling(60).mean() / df["Close"]
+    
+    df["rolling_std_20"] = df["log_return"].rolling(20).std()
+    df["rolling_std_60"] = df["log_return"].rolling(60).std()
+    
+    # Group 3: Liquidity Family
+    vol_mean_20 = df["Volume"].rolling(20).mean()
+    vol_std_20 = df["Volume"].rolling(20).std().replace(0, 1.0)
+    df["volume_zscore_20"] = (df["Volume"] - vol_mean_20) / vol_std_20
+    
+    vol_mean_60 = df["Volume"].rolling(60).mean()
+    vol_std_60 = df["Volume"].rolling(60).std().replace(0, 1.0)
+    df["volume_zscore_60"] = (df["Volume"] - vol_mean_60) / vol_std_60
+    
+    df["dollar_volume_log"] = np.log1p(df["Close"] * df["Volume"])
+    df["volume_ma60_ratio"] = df["Volume"] / vol_mean_60.replace(0, np.nan)
 
     df.dropna(inplace=True)
 

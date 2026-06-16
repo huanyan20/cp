@@ -3,44 +3,29 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-# 基礎特徵欄位（包含 v8.0 新增的動能特徵）
+# 基礎特徵欄位（包含 Milestone 3A 新增的 Feature Zoo）
 BASE_FEATURE_COLS = [
-    "Open_norm",
-    "High_norm",
-    "Low_norm",
-    "Close_norm",
-    "Volume_norm",
-    "RSI_norm",
-    "MACD_norm",
-    "MACDs_norm",
-    "MACDh_norm",
-    "BBU_norm",
-    "BBL_norm",
-    "BB_bandwidth",
-    "BB_pct_b",
-    "ADX_norm",
-    "DMP_norm",
-    "DMN_norm",
-    "ATR_norm",
-    "STOCHk_norm",
-    "STOCHd_norm",
-    "OBV_norm",
-    "MFI_norm",
+    # Feature Group 1: Momentum Family
+    "ret_5d", "ret_10d", "ret_20d", "ret_60d",
+    "price_ma20_ratio", "price_ma60_ratio", "price_ma120_ratio",
+    
+    # Feature Group 2: Volatility Family
+    "atr_20", "atr_60",
+    "rolling_std_20", "rolling_std_60",
+    
+    # Feature Group 3: Liquidity Family
+    "volume_zscore_20", "volume_zscore_60",
+    "dollar_volume_log", "volume_ma60_ratio",
+    
+    # 保留部分基礎技術指標
+    "RSI_14", "MACD_norm", "MACDh_norm", "BB_pct_b", "ADX_14",
+    
+    # 用於計算 label 或 rank 的基礎
     "log_return",
-    "open_return",
-    "mom_60d",
-    "ma60_bias",
 ]
 
-CROSS_ASSET_COLS = [
-    "peer1_logret",
-    "peer2_logret",
-    "corr_peer1_20d",
-    "corr_peer2_20d",
-    "rel_strength",
-    "sector_flow",
-    "market_breadth",
-]
+# 根據 Milestone 3A，暫時移除無效的 sector_flow 等特徵
+CROSS_ASSET_COLS = []
 
 DEFAULT_OVERNIGHT_FEATURE_COLS = [
     "tsm_adr_premium_chg",
