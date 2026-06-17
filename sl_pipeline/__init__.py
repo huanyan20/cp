@@ -20,6 +20,7 @@ from sl_pipeline.gate import (
 )
 from sl_pipeline.labels import (
     HORIZON_DAYS,
+    build_cross_demean_frame,
     build_feature_panel,
     build_labeled_panel,
     forward_log_return_t1,
@@ -53,6 +54,7 @@ __all__ = [
     "SignalGeneratorConfig",
     "TargetPortfolio",
     "build_feature_panel",
+    "build_cross_demean_frame",
     "build_labeled_panel",
     "build_sl_raw_summary",
     "build_sl_seed_metrics",

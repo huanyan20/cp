@@ -68,7 +68,7 @@ class RuleBasedAllocatorConfig:
     yellow_max_exposure: float = 0.50
     red_mdd: float = 0.13
     red_max_exposure: float = 0.0
-    max_single_weight: float = 0.25
+    max_single_weight: float = 0.20
     min_score: float = 0.005
     enable_momentum_scaling: bool = False
     momentum_scale_factor: float = 5.0
@@ -80,7 +80,25 @@ class RuleBasedAllocatorConfig:
 class RuleBasedAllocator(PortfolioAllocator):
     """Top-K + inv-vol + 15% vol-target + tiered MDD + turnover hysteresis."""
 
-    def __init__(self, risk_config: RiskConfig = RISK_V2, config: RuleBasedAllocatorConfig | None = None) -> None:
+    def __init__(
+        self,
+        risk_config: RiskConfig | RuleBasedAllocatorConfig = RISK_V2,
+        config: RuleBasedAllocatorConfig | None = None,
+    ) -> None:
+        if isinstance(risk_config, RuleBasedAllocatorConfig):
+            config = risk_config
+            risk_config = RiskConfig(
+                name="legacy_config",
+                vol_target=config.target_vol_annual,
+                yellow_mdd=config.yellow_mdd,
+                yellow_max_exposure=config.yellow_max_exposure,
+                red_mdd=config.red_mdd,
+                red_max_exposure=config.red_max_exposure,
+                max_single_weight=config.max_single_weight,
+                weight_band=config.weight_band,
+                top_k_hold=config.hysteresis_rank,
+                top_k=config.top_k,
+            )
         self.cfg = risk_config
         self.config = config or RuleBasedAllocatorConfig()
         self._regime_state = "normal"

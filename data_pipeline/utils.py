@@ -20,6 +20,11 @@ BASE_FEATURE_COLS = [
     # 保留部分基礎技術指標
     "RSI_14", "MACD_norm", "MACDh_norm", "BB_pct_b", "ADX_14",
     
+    # Feature Group 4: Market Regime (Milestone 3B)
+    "price_ma200_ratio",   # 200日均線比率：經典牛熊判斷
+    "trend_slope_60d",     # 60日趨勢斜率（正=多頭，負=空頭）
+    "above_ma120",         # 是否在120日線上（二元 Regime 旗標）
+    
     # 用於計算 label 或 rank 的基礎
     "log_return",
 ]

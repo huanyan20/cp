@@ -27,6 +27,7 @@ from sl_pipeline.gate import (
     run_sl_promotion_gate,
 )
 from sl_pipeline.labels import (
+    build_classification_label_frame,
     build_cross_demean_frame,
     build_labeled_panel,
     forward_log_return_t1,
@@ -94,10 +95,24 @@ class SlLabelsTests(unittest.TestCase):
         schema = build_feature_schema()
         for col in schema.columns:
             self.assertIn(col, panel.columns)
+        self.assertIn("rank_ret_20d", panel.columns)
         self.assertIn(label, panel.columns)
         self.assertIn("ticker", panel.columns)
         self.assertIn("date", panel.columns)
         self.assertEqual(panel[label].notna().sum(), len(panel))
+
+    def test_classification_label_frame_uses_three_buckets(self):
+        slopes = [-0.02, -0.01, 0.0, 0.01, 0.02]
+        enriched = {
+            f"T{i}": make_enriched_frame(days=40, log_slope=slope)
+            for i, slope in enumerate(slopes)
+        }
+        labels = build_classification_label_frame(enriched, horizon=5).dropna()
+        self.assertGreater(len(labels), 0)
+        first_row = labels.iloc[0]
+        self.assertEqual(first_row["T0"], 0.0)
+        self.assertEqual(first_row["T4"], 2.0)
+        self.assertEqual(set(first_row.astype(int)), {0, 1, 2})
 
     def test_split_panel_by_date_is_time_ordered(self):
         enriched = make_enriched_dict(["2330.TW"])
@@ -121,6 +136,25 @@ class SignalGeneratorTests(unittest.TestCase):
         preds = generator.predict(train_panel)
         self.assertEqual(len(preds), len(train_panel))
         self.assertTrue(np.isfinite(preds).all())
+
+    def test_predict_proba_returns_three_class_probabilities(self):
+        slopes = [-0.02, -0.01, 0.0, 0.01, 0.02]
+        enriched = {
+            f"T{i}": make_enriched_frame(days=80, log_slope=slope)
+            for i, slope in enumerate(slopes)
+        }
+        train_panel = build_labeled_panel(enriched, horizon=5)
+        generator = SignalGenerator(
+            SignalGeneratorConfig(
+                horizon=5,
+                lgbm_params={"n_estimators": 10, "verbosity": -1, "random_state": 42},
+            )
+        )
+        generator.fit(train_panel)
+        probs = generator.predict_proba(train_panel)
+        self.assertEqual(list(probs.columns), ["prob_bottom", "prob_middle", "prob_top"])
+        self.assertTrue(np.isfinite(probs.to_numpy()).all())
+        self.assertTrue(np.allclose(probs.sum(axis=1), 1.0))
 
     def test_fit_period_produces_per_ticker_series(self):
         tickers = ["2330.TW", "2317.TW"]
@@ -391,6 +425,19 @@ class SlGateTests(unittest.TestCase):
             records = read_sl_metric_files(tmp_path)
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["horizon"], 5)
+
+    def test_read_sl_metric_files_accepts_risk_suffix(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            payload_path = self._write_sl_metrics(tmp_path)
+            suffixed = tmp_path / "metrics_sl_rule_h5_v2_mdd_patch_seed42.json"
+            suffixed.write_text(payload_path.read_text(encoding="utf-8"), encoding="utf-8")
+            payload_path.unlink()
+            records = read_sl_metric_files(tmp_path)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["seed"], 42)
 
     def test_build_sl_raw_summary_groups_seeds(self):
         import tempfile

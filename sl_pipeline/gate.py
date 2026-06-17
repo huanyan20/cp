@@ -22,7 +22,8 @@ from sl_pipeline.candidate import (
 SETTINGS = load_settings()
 
 SL_METRICS_PATTERN = re.compile(
-    r"metrics_sl_(?P<allocator>\w+)_h(?P<horizon>\d+)_seed(?P<seed>\d+)\.json$"
+    r"metrics_sl_(?P<allocator>[A-Za-z0-9]+)_h(?P<horizon>\d+)"
+    r"(?P<suffix>(?:_[A-Za-z0-9]+)*)_seed(?P<seed>\d+)\.json$"
 )
 
 METRIC_KEYS = (
@@ -74,6 +75,7 @@ def read_sl_metric_files(results_dir: str | Path) -> list[dict]:
                 "variant": f"sl_{allocator}_h{horizon}",
                 "candidate_id": candidate_id,
                 "label_mode": label_mode,
+                "model_backend": data.get("model_backend", "lightgbm"),
                 **data,
             }
         )
@@ -102,6 +104,7 @@ def build_sl_raw_summary(records: list[dict]) -> list[dict]:
                 "cash_mode": record.get("cash_mode", "enabled"),
                 "variant": record.get("variant", "sl_rule"),
                 "allocator": record.get("allocator", "rule"),
+                "model_backend": record.get("model_backend", "lightgbm"),
                 "horizon": record.get("horizon", 5),
                 "candidate_id": record.get("candidate_id", "legacy"),
                 "label_mode": record.get("label_mode", "legacy"),
@@ -120,17 +123,19 @@ def build_sl_raw_summary(records: list[dict]) -> list[dict]:
         "cash_mode",
         "variant",
         "allocator",
+        "model_backend",
         "horizon",
         "candidate_id",
         "label_mode",
     ]
     for keys, group in frame.groupby(group_cols):
-        algo, cash_mode, variant, allocator, horizon, candidate_id, label_mode = keys
+        algo, cash_mode, variant, allocator, model_backend, horizon, candidate_id, label_mode = keys
         entry: dict[str, Any] = {
             "algo": algo,
             "cash_mode": cash_mode,
             "variant": variant,
             "allocator": allocator,
+            "model_backend": model_backend,
             "horizon": int(horizon),
             "candidate_id": candidate_id,
             "label_mode": label_mode,
@@ -171,6 +176,7 @@ def build_sl_period_dataframe(records: list[dict]) -> pd.DataFrame:
                     "algo": record.get("algo", "sl_lightgbm"),
                     "cash_mode": record.get("cash_mode", "enabled"),
                     "variant": record.get("variant", "sl_rule"),
+                    "model_backend": record.get("model_backend", "lightgbm"),
                     "candidate_id": record.get("candidate_id", "legacy"),
                     "label_mode": record.get("label_mode", "legacy"),
                     "seed": record.get("seed"),
@@ -212,6 +218,7 @@ def run_sl_promotion_gate(
     baseline_summary: dict[str, Any] | None = None,
     target_horizon: int | None = None,
     target_candidate_id: str | None = None,
+    target_model_backend: str | None = None,
 ) -> tuple[PromotionResult, list[dict], pd.DataFrame]:
     """Run promotion gate on SL metrics (no RL baseline/ablation/stress gates)."""
     sortino_threshold = (
@@ -242,6 +249,7 @@ def run_sl_promotion_gate(
                     "allocator": data.get("allocator", "rule"),
                     "horizon": data.get("horizon", 5),
                     "variant": f"sl_{data.get('allocator', 'rule')}_h{data.get('horizon', 5)}",
+                    "model_backend": data.get("model_backend", "lightgbm"),
                     **data,
                 }
             ]
@@ -251,6 +259,7 @@ def run_sl_promotion_gate(
                     "allocator": metrics.get("allocator", "rule"),
                     "horizon": metrics.get("horizon", 5),
                     "variant": f"sl_{metrics.get('allocator', 'rule')}_h{metrics.get('horizon', 5)}",
+                    "model_backend": metrics.get("model_backend", "lightgbm"),
                     **metrics,
                 }
             ]
@@ -261,6 +270,9 @@ def run_sl_promotion_gate(
         records = [r for r in records if r.get("horizon") == target_horizon]
     if target_candidate_id is not None:
         records = [r for r in records if r.get("candidate_id") == target_candidate_id]
+    if target_model_backend is not None:
+        backend = target_model_backend.strip().lower()
+        records = [r for r in records if r.get("model_backend", "lightgbm") == backend]
 
     if baseline_summary is None:
         try:
@@ -306,9 +318,11 @@ def sl_gate_result_path(
     horizon: int,
     allocator: str = "rule",
     seed: int | None = None,
+    model_backend: str = "lightgbm",
 ) -> Path:
     suffix = f"_seed{seed}" if seed is not None else "_multiseed"
-    return results_dir / f"sl_gate_result_{allocator}_h{horizon}{suffix}.json"
+    backend_suffix = "" if model_backend == "lightgbm" else f"_{model_backend}"
+    return results_dir / f"sl_gate_result_{allocator}_h{horizon}{backend_suffix}{suffix}.json"
 
 
 def save_sl_gate_result(
@@ -320,6 +334,7 @@ def save_sl_gate_result(
     allocator: str = "rule",
     metrics_path: str | None = None,
     seed: int | None = None,
+    model_backend: str = "lightgbm",
     candidate_metadata: dict[str, Any] | None = None,
 ) -> Path:
     """Persist SL gate outcome for experiment_report / audit."""
@@ -346,6 +361,7 @@ def save_sl_gate_result(
     payload = {
         "strategy": "sl_rule",
         "allocator": allocator,
+        "model_backend": model_backend,
         "horizon": horizon,
         "candidate_id": candidate_id,
         "candidate_metadata": candidate_metadata,
@@ -355,7 +371,13 @@ def save_sl_gate_result(
         "promotion_gate": promotion_result_to_dict(result),
         "summary": raw_summary,
     }
-    path = sl_gate_result_path(results_dir, horizon=horizon, allocator=allocator, seed=seed)
+    path = sl_gate_result_path(
+        results_dir,
+        horizon=horizon,
+        allocator=allocator,
+        seed=seed,
+        model_backend=model_backend,
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return path

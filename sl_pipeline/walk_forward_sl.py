@@ -15,26 +15,28 @@ from data_pipeline.universe_builder import get_universe_builder
 from metrics_utils import calculate_metrics
 from research_pipeline import PERIODS, build_period_plan, write_metrics_json
 from settings import load_settings
+from sl_pipeline.allocator import PortfolioState
 from sl_pipeline.backtest import (
+    BacktestConfig,
     build_sl_seed_metrics,
     metrics_from_backtest,
     simulate_period,
     sl_metrics_path,
-    BacktestConfig,
 )
-from sl_pipeline.gate import run_sl_promotion_gate, save_sl_gate_result
-from sl_pipeline.allocator import PortfolioState
 from sl_pipeline.candidate import current_candidate_metadata
+from sl_pipeline.gate import run_sl_promotion_gate, save_sl_gate_result
 from sl_pipeline.rule_based_allocator import (
-    RuleBasedAllocator,
-    RuleBasedAllocatorConfig,
     RISK_CONFIGS,
     RISK_V2,
+    RuleBasedAllocator,
+    RuleBasedAllocatorConfig,
 )
 from sl_pipeline.signal_generator import (
     DEFAULT_LGBM_PARAMS,
+    DEFAULT_XGB_PARAMS,
     SignalGenerator,
     SignalGeneratorConfig,
+    normalize_model_backend,
 )
 from stock_universe import MACRO_TICKERS_RL
 
@@ -76,10 +78,51 @@ def build_allocator(name: str, risk_config_key: str = "v2") -> RuleBasedAllocato
     )
 
 
+def _model_artifact_suffix(model_backend: str) -> str:
+    backend = normalize_model_backend(model_backend)
+    return "" if backend == "lightgbm" else f"_{backend}"
+
+
+def _variant_name(*, allocator_name: str, horizon: int, risk_name: str, model_backend: str) -> str:
+    backend = normalize_model_backend(model_backend)
+    backend_part = "" if backend == "lightgbm" else f"_{backend}"
+    return f"sl_{allocator_name}_h{horizon}{backend_part}_{risk_name}"
+
+
+def build_signal_generator(
+    *,
+    horizon: int,
+    seed: int,
+    model_backend: str = "lightgbm",
+) -> SignalGenerator:
+    backend = normalize_model_backend(model_backend)
+    if backend == "lightgbm":
+        params = dict(DEFAULT_LGBM_PARAMS)
+        params["random_state"] = seed
+        return SignalGenerator(
+            SignalGeneratorConfig(
+                horizon=horizon,
+                model_backend=backend,
+                lgbm_params=params,
+            )
+        )
+
+    params = dict(DEFAULT_XGB_PARAMS)
+    params["random_state"] = seed
+    return SignalGenerator(
+        SignalGeneratorConfig(
+            horizon=horizon,
+            model_backend=backend,
+            xgb_params=params,
+        )
+    )
+
+
 def run_single_period(
     period_name: str,
     *,
     horizon: int = 5,
+    model_backend: str = "lightgbm",
     allocator_name: str | None = None,
     risk_config_key: str = "v2",
     seed: int = 42,
@@ -88,7 +131,8 @@ def run_single_period(
     write_metrics: bool = False,
     results_dir: Path | None = None,
 ) -> dict:
-    """Train LightGBM on one walk-forward period; optionally run allocator backtest."""
+    """Train one SL model on one walk-forward period; optionally run allocator backtest."""
+    model_backend = normalize_model_backend(model_backend)
     plan = build_period_plan()
     planned = next((p for p in plan if p["name"] == period_name), None)
     if planned is None:
@@ -116,10 +160,10 @@ def run_single_period(
         macro_tickers=MACRO_TICKERS_RL,
     )
 
-    lgbm_params = dict(DEFAULT_LGBM_PARAMS)
-    lgbm_params["random_state"] = seed
-    generator = SignalGenerator(
-        SignalGeneratorConfig(horizon=horizon, lgbm_params=lgbm_params)
+    generator = build_signal_generator(
+        horizon=horizon,
+        seed=seed,
+        model_backend=model_backend,
     )
     scores, summary = generator.fit_period(
         train_data,
@@ -130,20 +174,25 @@ def run_single_period(
 
     out_dir = output_dir or Path(tempfile.mkdtemp(prefix=f"sl_{period_name}_"))
     out_dir.mkdir(parents=True, exist_ok=True)
-    scores_path = out_dir / f"scores_{period_name}_h{horizon}.csv"
-    summary_path = out_dir / f"summary_{period_name}_h{horizon}.json"
+    model_suffix = _model_artifact_suffix(model_backend)
+    scores_path = out_dir / f"scores_{period_name}_h{horizon}{model_suffix}.csv"
+    summary_path = out_dir / f"summary_{period_name}_h{horizon}{model_suffix}.json"
+    predictions_path = out_dir / f"predictions_{period_name}_h{horizon}{model_suffix}.csv"
     generator.save_scores(scores, scores_path)
     generator.save_summary(summary, summary_path)
+    generator.save_prediction_panel(predictions_path)
 
     wide = generator.scores_to_wide(scores)
     result: dict = {
         "period": period_name,
         "horizon": horizon,
+        "model_backend": model_backend,
         "allocator": allocator_name,
         "seed": seed,
         "output_dir": str(out_dir),
         "scores_path": str(scores_path),
         "summary_path": str(summary_path),
+        "predictions_path": str(predictions_path),
         "n_tickers": len(scores),
         "n_oos_days": wide.shape[0],
         "score_mean": wide.mean().mean(),
@@ -174,7 +223,7 @@ def run_single_period(
             "n_days": backtest["n_days"],
             "metrics": period_metrics,
         }
-        metrics_path = out_dir / f"metrics_{period_name}_h{horizon}.json"
+        metrics_path = out_dir / f"metrics_{period_name}_h{horizon}{model_suffix}.json"
         metrics_path.write_text(
             json.dumps(period_metrics, indent=2, ensure_ascii=False), encoding="utf-8"
         )
@@ -185,16 +234,27 @@ def run_single_period(
                 horizon=horizon,
                 seed=seed,
                 allocator=allocator_name,
+                model_backend=model_backend,
                 settings=SETTINGS,
                 allocator_config=allocator.config,
             )
             seed_metrics["periods"][period_name] = period_metrics
             seed_metrics["overall"] = period_metrics
             out_results = results_dir or SETTINGS.paths.results_dir
-            seed_metrics["variant"] = f"sl_rule_h{horizon}_{allocator.config_name}"
+            seed_metrics["variant"] = _variant_name(
+                allocator_name=allocator_name,
+                horizon=horizon,
+                risk_name=allocator.config_name,
+                model_backend=model_backend,
+            )
             seed_metrics["risk_config"] = allocator.config_name
             path = sl_metrics_path(
-                out_results, horizon=horizon, seed=seed, allocator=allocator_name, risk_name=allocator.config_name
+                out_results,
+                horizon=horizon,
+                seed=seed,
+                allocator=allocator_name,
+                risk_name=allocator.config_name,
+                model_backend=model_backend,
             )
             write_metrics_json(seed_metrics, str(path))
             result["metrics_path"] = str(path)
@@ -209,6 +269,7 @@ def run_single_period(
 def run_walk_forward_sl(
     *,
     horizon: int = 5,
+    model_backend: str = "lightgbm",
     allocator_name: str = "rule",
     risk_config_key: str = "v2",
     seed: int = 42,
@@ -217,6 +278,7 @@ def run_walk_forward_sl(
     results_dir: Path | None = None,
     run_gate: bool = False,
 ) -> dict:
+    model_backend = normalize_model_backend(model_backend)
     plan = build_period_plan()
     allocator = build_allocator(allocator_name, risk_config_key)
     if tickers is None:
@@ -230,6 +292,7 @@ def run_walk_forward_sl(
         horizon=horizon,
         seed=seed,
         allocator=allocator_name,
+        model_backend=model_backend,
         settings=SETTINGS,
         allocator_config=allocator.config,
     )
@@ -274,10 +337,10 @@ def run_walk_forward_sl(
             macro_tickers=MACRO_TICKERS_RL,
         )
 
-        lgbm_params = dict(DEFAULT_LGBM_PARAMS)
-        lgbm_params["random_state"] = seed
-        generator = SignalGenerator(
-            SignalGeneratorConfig(horizon=horizon, lgbm_params=lgbm_params)
+        generator = build_signal_generator(
+            horizon=horizon,
+            seed=seed,
+            model_backend=model_backend,
         )
         scores, _ = generator.fit_period(
             train_data,
@@ -289,8 +352,11 @@ def run_walk_forward_sl(
         if output_dir:
             out_d = Path(output_dir)
             out_d.mkdir(parents=True, exist_ok=True)
-            scores_path = out_d / f"scores_{name}_h{horizon}.csv"
+            model_suffix = _model_artifact_suffix(model_backend)
+            scores_path = out_d / f"scores_{name}_h{horizon}{model_suffix}.csv"
+            predictions_path = out_d / f"predictions_{name}_h{horizon}{model_suffix}.csv"
             generator.save_scores(scores, scores_path)
+            generator.save_prediction_panel(predictions_path)
 
         combined_test = {**train_data, **test_data}
         period_cache.append({
@@ -349,10 +415,20 @@ def run_walk_forward_sl(
     seed_metrics["overall"] = overall_metrics
 
     out_results = results_dir or SETTINGS.paths.results_dir
-    seed_metrics["variant"] = f"sl_rule_h{horizon}_{allocator.config_name}"
+    seed_metrics["variant"] = _variant_name(
+        allocator_name=allocator_name,
+        horizon=horizon,
+        risk_name=allocator.config_name,
+        model_backend=model_backend,
+    )
     seed_metrics["risk_config"] = allocator.config_name
     path = sl_metrics_path(
-        out_results, horizon=horizon, seed=seed, allocator=allocator_name, risk_name=allocator.config_name
+        out_results,
+        horizon=horizon,
+        seed=seed,
+        allocator=allocator_name,
+        risk_name=allocator.config_name,
+        model_backend=model_backend,
     )
     write_metrics_json(seed_metrics, str(path))
 
@@ -426,6 +502,7 @@ def run_walk_forward_sl(
         "candidate_id": candidate_metadata["candidate_id"],
         "candidate_metadata": candidate_metadata,
         "horizon": horizon,
+        "model_backend": model_backend,
         "allocator": allocator_name,
         "seed": seed,
         "generated_at": candidate_metadata["generated_at"],
@@ -443,7 +520,10 @@ def run_walk_forward_sl(
     stress_path = out_results / "stress_summary.json"
     stress_path.parent.mkdir(parents=True, exist_ok=True)
     stress_path.write_text(json.dumps(stress_summary, indent=2), encoding="utf-8")
-    seed_stress_path = out_results / f"stress_summary_sl_{allocator_name}_h{horizon}_seed{seed}.json"
+    seed_stress_path = out_results / (
+        f"stress_summary_sl_{allocator_name}_h{horizon}"
+        f"{_model_artifact_suffix(model_backend)}_seed{seed}.json"
+    )
     seed_stress_path.write_text(json.dumps(stress_summary, indent=2), encoding="utf-8")
     # -----------------------------
 
@@ -453,6 +533,7 @@ def run_walk_forward_sl(
             json.dumps(
                 {
                     "horizon": horizon,
+                    "model_backend": model_backend,
                     "allocator": allocator_name,
                     "seed": seed,
                     "candidate_id": candidate_metadata["candidate_id"],
@@ -469,6 +550,7 @@ def run_walk_forward_sl(
 
     result = {
         "horizon": horizon,
+        "model_backend": model_backend,
         "allocator": allocator_name,
         "seed": seed,
         "candidate_id": candidate_metadata["candidate_id"],
@@ -485,6 +567,7 @@ def run_walk_forward_sl(
         gate_result, raw_summary, _ = run_sl_promotion_gate(
             path,
             min_seeds=SETTINGS.research.promotion_min_seeds,
+            target_model_backend=model_backend,
         )
         gate_path = save_sl_gate_result(
             gate_result,
@@ -494,6 +577,7 @@ def run_walk_forward_sl(
             allocator=allocator_name,
             metrics_path=str(path),
             seed=seed,
+            model_backend=model_backend,
         )
         result["promotion_gate"] = {
             "core_gate_approved": gate_result.core_gate_approved,
@@ -510,14 +594,20 @@ def run_walk_forward_sl(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="SL walk-forward: LightGBM scores + rule allocator backtest"
+        description="SL walk-forward: LightGBM/XGBoost three-class scores + rule allocator backtest"
     )
     parser.add_argument(
         "--period",
         default=None,
         help="Single period name (omit for all planned periods)",
     )
-    parser.add_argument("--horizon", type=int, default=5, choices=(5, 10))
+    parser.add_argument("--horizon", type=int, default=5, choices=(5, 10, 20, 60))
+    parser.add_argument(
+        "--model-backend",
+        default="lightgbm",
+        choices=("lightgbm", "xgboost"),
+        help="Three-class model backend",
+    )
     parser.add_argument(
         "--allocator", default=None, help="S2: rule-based allocator (use 'rule')"
     )
@@ -550,6 +640,7 @@ def main(argv: list[str] | None = None) -> int:
         result = run_single_period(
             args.period,
             horizon=args.horizon,
+            model_backend=args.model_backend,
             allocator_name=args.allocator,
             risk_config_key=args.risk_config,
             seed=args.seed,
@@ -561,6 +652,7 @@ def main(argv: list[str] | None = None) -> int:
             for k in (
                 "period",
                 "horizon",
+                "model_backend",
                 "allocator",
                 "output_dir",
                 "n_tickers",
@@ -583,6 +675,7 @@ def main(argv: list[str] | None = None) -> int:
             payload["metrics_path"] = result["metrics_path"]
         print(json.dumps(payload, indent=2))
         print(f"Scores: {result['scores_path']}")
+        print(f"Predictions: {result['predictions_path']}")
         if "period_metrics_path" in result:
             print(f"Period metrics: {result['period_metrics_path']}")
         return 0
@@ -592,7 +685,9 @@ def main(argv: list[str] | None = None) -> int:
 
     result = run_walk_forward_sl(
         horizon=args.horizon,
+        model_backend=args.model_backend,
         allocator_name=args.allocator,
+        risk_config_key=args.risk_config,
         seed=args.seed,
         output_dir=out,
         run_gate=args.gate,
@@ -600,6 +695,7 @@ def main(argv: list[str] | None = None) -> int:
     overall = result["overall"]
     payload = {
         "horizon": result["horizon"],
+        "model_backend": result["model_backend"],
         "allocator": result["allocator"],
         "metrics_path": result["metrics_path"],
         "overall_return_pct": round(overall["total_return"] * 100, 2),

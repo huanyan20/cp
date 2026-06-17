@@ -575,11 +575,13 @@ def build_sl_seed_metrics(
     horizon: int,
     seed: int,
     allocator: str = "rule",
+    model_backend: str = "lightgbm",
     settings: AppSettings | None = None,
     allocator_config: object | None = None,
 ) -> dict:
     """Metrics JSON template for SL walk-forward (Gate-compatible namespace)."""
     settings = settings or load_settings()
+    model_backend = model_backend.strip().lower()
     candidate_metadata = current_candidate_metadata(
         horizon=horizon,
         allocator=allocator,
@@ -589,7 +591,8 @@ def build_sl_seed_metrics(
     return {
         "strategy": "sl_rule",
         "allocator": allocator,
-        "algo": "sl_lightgbm",
+        "algo": f"sl_{model_backend}",
+        "model_backend": model_backend,
         "horizon": horizon,
         "seed": seed,
         "candidate_id": candidate_metadata["candidate_id"],
@@ -606,6 +609,7 @@ def build_sl_seed_metrics(
         "env_config": {
             "strategy": "sl_rule",
             "allocator": allocator,
+            "model_backend": model_backend,
             "horizon": horizon,
             "vol_target": settings.research.sl_target_vol,
             "top_k": settings.research.default_topk,
@@ -650,8 +654,10 @@ def sl_metrics_path(
     seed: int,
     allocator: str = "rule",
     risk_name: str = "v2_mdd_patch",
+    model_backend: str = "lightgbm",
 ) -> Path:
-    return results_dir / f"metrics_sl_{allocator}_h{horizon}_{risk_name}_seed{seed}.json"
+    backend_suffix = "" if model_backend == "lightgbm" else f"_{model_backend}"
+    return results_dir / f"metrics_sl_{allocator}_h{horizon}{backend_suffix}_{risk_name}_seed{seed}.json"
 
 
 def persist_sl_metrics(metrics: dict, path: Path) -> Path:

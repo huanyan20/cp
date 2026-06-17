@@ -1,4 +1,4 @@
-"""Cross-sectional demeaned forward-return labels for pooled LightGBM training."""
+"""Forward-return labels and feature panels for pooled SL model training."""
 
 from __future__ import annotations
 
@@ -16,9 +16,15 @@ def label_column_name(horizon: int) -> str:
     return f"target_{horizon}d_class"
 
 
+def rank_feature_columns(base_cols: list[str] | None = None) -> list[str]:
+    """Cross-sectional rank features derived from same-date raw features."""
+    source_cols = base_cols or list(BASE_FEATURE_COLS)
+    return [f"rank_{col}" for col in source_cols if col != "log_return"]
+
+
 def default_feature_columns() -> list[str]:
     """Feature columns aligned with Milestone 3A."""
-    return list(BASE_FEATURE_COLS)
+    return list(BASE_FEATURE_COLS) + rank_feature_columns()
 
 
 def forward_log_return_t1(log_return: pd.Series, end_day: int) -> pd.Series:
@@ -57,11 +63,42 @@ def build_classification_label_frame(
     # 1: Middle 60%
     # 0: Bottom 20%
     classes = pd.DataFrame(np.nan, index=raw_df.index, columns=raw_df.columns)
-    classes[rank >= 0.80] = 2.0
-    classes[(rank < 0.80) & (rank > 0.20)] = 1.0
+    classes[rank > 0.80] = 2.0
+    classes[(rank <= 0.80) & (rank > 0.20)] = 1.0
     classes[rank <= 0.20] = 0.0
     
     return classes
+
+
+def build_cross_demean_frame(
+    enriched: dict[str, pd.DataFrame],
+    horizon: int,
+) -> pd.DataFrame:
+    """Legacy regression label: forward return minus same-date universe mean."""
+    raw = {
+        ticker: forward_log_return_t1(df["log_return"], horizon)
+        for ticker, df in enriched.items()
+    }
+    raw_df = pd.DataFrame(raw)
+    return raw_df.sub(raw_df.mean(axis=1), axis=0)
+
+
+def _rank_source_columns(feature_cols: list[str]) -> list[str]:
+    sources: list[str] = []
+    for col in feature_cols:
+        if col.startswith("rank_"):
+            source = col.removeprefix("rank_")
+            if source not in sources:
+                sources.append(source)
+    return sources
+
+
+def _required_source_columns(feature_cols: list[str]) -> list[str]:
+    required = [col for col in feature_cols if not col.startswith("rank_")]
+    for source in _rank_source_columns(feature_cols):
+        if source not in required:
+            required.append(source)
+    return required
 
 
 def _add_cross_sectional_ranks(panel: pd.DataFrame, base_cols: list[str]) -> pd.DataFrame:
@@ -80,15 +117,16 @@ def build_labeled_panel(
 ) -> pd.DataFrame:
     """Long panel: one row per (date, ticker) with features + classification label."""
     feature_cols = feature_cols or default_feature_columns()
+    source_cols = _required_source_columns(feature_cols)
     label_col = label_column_name(horizon)
     label_frame = build_classification_label_frame(enriched, horizon)
 
     frames: list[pd.DataFrame] = []
     for ticker, df in enriched.items():
-        missing = [c for c in feature_cols if c not in df.columns]
+        missing = [c for c in source_cols if c not in df.columns]
         if missing:
             raise ValueError(f"{ticker} missing feature columns: {missing}")
-        part = df[feature_cols].copy()
+        part = df[source_cols].copy()
         part["ticker"] = ticker
         part["date"] = df.index
         part[label_col] = label_frame[ticker].reindex(df.index).values
@@ -96,7 +134,7 @@ def build_labeled_panel(
 
     panel = pd.concat(frames, ignore_index=True)
     panel = panel.dropna(subset=[label_col]).sort_values(["date", "ticker"]).reset_index(drop=True)
-    panel = _add_cross_sectional_ranks(panel, feature_cols)
+    panel = _add_cross_sectional_ranks(panel, _rank_source_columns(feature_cols))
     return panel
 
 
@@ -106,15 +144,19 @@ def build_feature_panel(
 ) -> pd.DataFrame:
     """Inference panel without labels (OOS scoring)."""
     feature_cols = feature_cols or default_feature_columns()
+    source_cols = _required_source_columns(feature_cols)
     frames: list[pd.DataFrame] = []
     for ticker, df in enriched.items():
-        part = df[feature_cols].copy()
+        missing = [c for c in source_cols if c not in df.columns]
+        if missing:
+            raise ValueError(f"{ticker} missing feature columns: {missing}")
+        part = df[source_cols].copy()
         part["ticker"] = ticker
         part["date"] = df.index
         frames.append(part.reset_index(drop=True))
         
     panel = pd.concat(frames, ignore_index=True).sort_values(["date", "ticker"]).reset_index(drop=True)
-    panel = _add_cross_sectional_ranks(panel, feature_cols)
+    panel = _add_cross_sectional_ranks(panel, _rank_source_columns(feature_cols))
     return panel
 
 

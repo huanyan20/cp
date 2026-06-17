@@ -1,0 +1,143 @@
+{
+  "horizon": 10,
+  "model_backend": "lightgbm",
+  "seed": 42,
+  "n_ic_features": 32,
+  "overall": {
+    "total_return": -0.3053549451829527,
+    "max_drawdown": 0.3622896593394479,
+    "sharpe": -0.7938060250957863,
+    "sortino": -0.7605418644644774,
+    "win_rate": 0.21739130434782608,
+    "avg_cash_weight": 0.8248835124741453,
+    "long_exposure": 0.17658919653467486,
+    "short_exposure": 0.0,
+    "cash_weight_std": 0.25486643502497125,
+    "cash_corr_next_return": 0.10459764762829651,
+    "short_corr_next_return": 0.0,
+    "turnover": 0.12252632804568545,
+    "top_holdings": {
+      "2330.TW": 0.01366676684699125,
+      "3665.TW": 0.01130785413744741,
+      "2317.TW": 0.010517598343685307
+    }
+  },
+  "periods": {
+    "2022_BEAR": {
+      "total_return": -0.1308991676801169,
+      "max_drawdown": 0.1308991676801169,
+      "sharpe": -2.097366200677482,
+      "sortino": -1.2479414512898392,
+      "win_rate": 0.08163265306122448,
+      "avg_cash_weight": 0.9414801891142609,
+      "long_exposure": 0.058642259865330955,
+      "short_exposure": 0.0,
+      "cash_weight_std": 0.13424128324794932,
+      "cash_corr_next_return": 0.4981663485913504,
+      "short_corr_next_return": 0.0,
+      "turnover": 0.054762928191085386,
+      "top_holdings": {
+        "8996.TW": 0.010816326530612241
+      },
+      "test_start": "2022-01-01",
+      "test_end": "2022-12-31",
+      "period": "2022_BEAR",
+      "n_days": 245
+    },
+    "2024H2": {
+      "total_return": -0.1362020407262522,
+      "max_drawdown": 0.14874025838173974,
+      "sharpe": -2.805262486636373,
+      "sortino": -2.6328406145503003,
+      "win_rate": 0.1951219512195122,
+      "avg_cash_weight": 0.8431941370571772,
+      "long_exposure": 0.1591364862490562,
+      "short_exposure": 0.0,
+      "cash_weight_std": 0.25066286163997487,
+      "cash_corr_next_return": 0.4625163680289796,
+      "short_corr_next_return": 0.0,
+      "turnover": 0.11654001716711239,
+      "top_holdings": {
+        "3529.TWO": 0.03994949437913745,
+        "3665.TW": 0.03211382113821139,
+        "6415.TW": 0.013008130081300813
+      },
+      "test_start": "2024-07-01",
+      "test_end": "2024-12-31",
+      "period": "2024H2",
+      "n_days": 123
+    },
+    "2025H1": {
+      "total_return": -0.025201405038451696,
+      "max_drawdown": 0.04955721784964178,
+      "sharpe": -0.8527060049559629,
+      "sortino": -0.907578366248517,
+      "win_rate": 0.12280701754385964,
+      "avg_cash_weight": 0.9206140350877192,
+      "long_exposure": 0.07938596491228071,
+      "short_exposure": 0.0,
+      "cash_weight_std": 0.11950398281345885,
+      "cash_corr_next_return": 0.04742700657035477,
+      "short_corr_next_return": 0.0,
+      "turnover": 0.07516176484240428,
+      "top_holdings": {
+        "2408.TW": 0.02109649122807018,
+        "2368.TW": 0.01885964912280702
+      },
+      "test_start": "2025-01-01",
+      "test_end": "2025-06-30",
+      "period": "2025H1",
+      "n_days": 114
+    },
+    "2025H2": {
+      "total_return": -0.12589436645398777,
+      "max_drawdown": 0.13981853902140828,
+      "sharpe": -1.136793724428815,
+      "sortino": -1.5980006695240148,
+      "win_rate": 0.3951612903225806,
+      "avg_cash_weight": 0.5544470046082951,
+      "long_exposure": 0.4474731182795699,
+      "short_exposure": 0.0,
+      "cash_weight_std": 0.26553754904634397,
+      "cash_corr_next_return": 0.048014871483427195,
+      "short_corr_next_return": 0.0,
+      "turnover": 0.25039043328772737,
+      "top_holdings": {
+        "2317.TW": 0.06047619047619052,
+        "2330.TW": 0.04270353302611367,
+        "3665.TW": 0.031283602150537625,
+        "3653.TW": 0.027741935483870966,
+        "2368.TW": 0.026693548387096776
+      },
+      "test_start": "2025-07-01",
+      "test_end": "2025-12-31",
+      "period": "2025H2",
+      "n_days": 124
+    },
+    "2026H1": {
+      "total_return": 0.08592990962511893,
+      "max_drawdown": 0.15245657407812035,
+      "sharpe": 0.9031923108429976,
+      "sortino": 1.0075804983426822,
+      "win_rate": 0.4485981308411215,
+      "avg_cash_weight": 0.7482709404823393,
+      "long_exposure": 0.2563578409992198,
+      "short_exposure": 0.0,
+      "cash_weight_std": 0.3008705305253532,
+      "cash_corr_next_return": -0.03199306493423688,
+      "short_corr_next_return": 0.0,
+      "turnover": 0.1868511912008478,
+      "top_holdings": {
+        "2330.TW": 0.029937694704049854,
+        "3189.TW": 0.025887850467289714,
+        "8996.TW": 0.023707165109034267,
+        "8299.TWO": 0.023487502643043324,
+        "3037.TW": 0.021417445482866046
+      },
+      "test_start": "2026-01-01",
+      "test_end": "2026-06-18",
+      "period": "2026H1",
+      "n_days": 107
+    }
+  }
+}

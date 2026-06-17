@@ -1,0 +1,28 @@
+{
+  "horizon": 5,
+  "model_backend": "lightgbm",
+  "n_train_rows": 38700,
+  "n_test_rows": 5580,
+  "n_features": 32,
+  "train_start": "2020-12-04",
+  "train_end": "2024-06-30",
+  "test_start": "2024-07-01",
+  "test_end": "2024-12-30",
+  "train_class_distribution": {
+    "1": 23220,
+    "0": 7740,
+    "2": 7740
+  },
+  "feature_importance_top10": {
+    "rolling_std_60": 1150.0,
+    "price_ma200_ratio": 1138.0,
+    "rolling_std_20": 1119.0,
+    "ADX_14": 1071.0,
+    "twii_ma200_ratio": 1035.0,
+    "atr_60": 1015.0,
+    "atr_20": 1013.0,
+    "dollar_volume_log": 911.0,
+    "RSI_14": 829.0,
+    "twii_ma60_ratio": 810.0
+  }
+}

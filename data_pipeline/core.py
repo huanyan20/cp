@@ -184,6 +184,21 @@ def fetch_and_process_data(
     df["dollar_volume_log"] = np.log1p(df["Close"] * df["Volume"])
     df["volume_ma60_ratio"] = df["Volume"] / vol_mean_60.replace(0, np.nan)
 
+    # Group 4: Market Regime Features (Milestone 3B fix)
+    # These are stock-level features derived from own price history,
+    # but serve as proxies for market regime state.
+    # The 200-day MA ratio is the classic bull/bear regime indicator.
+    ma200 = df["Close"].rolling(200).mean()
+    df["price_ma200_ratio"] = (df["Close"] / ma200.replace(0, np.nan)).clip(0.5, 2.0)
+
+    # 60-day trend slope (linearly detrended return rate, annualized)
+    # Positive = uptrend, Negative = downtrend
+    df["trend_slope_60d"] = df["log_return"].rolling(60).mean() * 252
+
+    # Regime flag: is price > 120-day MA? (1=bull, 0=bear)
+    ma120 = df["Close"].rolling(120).mean()
+    df["above_ma120"] = (df["Close"] > ma120).astype(float)
+
     df.dropna(inplace=True)
 
     result = df[BASE_FEATURE_COLS].copy()
