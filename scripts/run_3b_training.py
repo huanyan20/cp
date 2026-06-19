@@ -110,10 +110,17 @@ def run_walk_forward(
     model_backend: str,
     seed: int,
     out_dir: Path,
+    rolling_window_years: int = 0,  # 0 = expanding window (default); >0 = rolling
 ) -> dict:
-    """Full walk-forward with 3-class classifier on IC-filtered features."""
+    """Full walk-forward with 3-class classifier on IC-filtered features.
+
+    Args:
+        rolling_window_years: If > 0, clamp train_start to (train_end - N years).
+            E.g. rolling_window_years=2 means the model only sees the most recent 2 years.
+    """
+    rolling_tag = f"rolling{rolling_window_years}yr" if rolling_window_years > 0 else "expanding"
     print(f"\n{'='*60}")
-    print(f"  Model: {model_backend.upper()} | Horizon: {horizon}d | Seed: {seed}")
+    print(f"  Model: {model_backend.upper()} | Horizon: {horizon}d | Seed: {seed} | Window: {rolling_tag}")
     print(f"{'='*60}")
 
     plan = build_period_plan()
@@ -138,7 +145,18 @@ def run_walk_forward(
         train_end = planned.get("effective_train_end", period["train_end"])
         test_end = planned.get("effective_test_end", period["test_end"])
 
-        print(f"\n  Period: {name} | Train: {period['train_start']} ~ {train_end} | Test: {period['test_start']} ~ {test_end}")
+        # Rolling window: clamp train_start to (train_end - N years)
+        effective_train_start = period["train_start"]
+        if rolling_window_years > 0:
+            import datetime
+            te = pd.Timestamp(train_end)
+            clamped = te - pd.DateOffset(years=rolling_window_years)
+            effective_train_start = max(
+                pd.Timestamp(period["train_start"]),
+                clamped
+            ).strftime("%Y-%m-%d")
+
+        print(f"\n  Period: {name} | Train: {effective_train_start} ~ {train_end} | Test: {period['test_start']} ~ {test_end}")
 
         # Dynamic universe per period
         period_tickers = builder.build_universe(period["train_start"], top_n=45)
@@ -146,7 +164,7 @@ def run_walk_forward(
 
         train_data = fetch_multi_asset_data(
             tickers=period_tickers,
-            start_date=period["train_start"],
+            start_date=effective_train_start,
             end_date=train_end,
             macro_tickers=["^TWII"],  # Option A: enable TWII market regime features
         )
@@ -298,6 +316,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Comma-separated list of random seeds (e.g. '42,43,44')",
     )
     parser.add_argument("--output-dir", type=Path, default=None)
+    parser.add_argument(
+        "--rolling-window",
+        type=int,
+        default=0,
+        metavar="YEARS",
+        help="Rolling training window in years (0=expanding, 2=last 2yr only)",
+    )
     args = parser.parse_args(argv)
 
     seeds = [int(s.strip()) for s in args.seeds.split(",")]
@@ -312,12 +337,13 @@ def main(argv: list[str] | None = None) -> int:
         encoding="utf-8",
     )
     print(f"IC-filtered features ({len(IC_FILTERED_FEATURES)}): {IC_FILTERED_FEATURES}")
+    rolling_suffix = f"_rolling{args.rolling_window}yr" if args.rolling_window > 0 else ""
 
     all_results = []
     for model_backend in models:
         for seed in seeds:
             out_dir = args.output_dir or (
-                REPORTS_DIR / f"{model_backend}_{args.horizon}d_seed{seed}"
+                REPORTS_DIR / f"{model_backend}_{args.horizon}d{rolling_suffix}_seed{seed}"
             )
             out_dir.mkdir(parents=True, exist_ok=True)
             result = run_walk_forward(
@@ -325,6 +351,7 @@ def main(argv: list[str] | None = None) -> int:
                 model_backend=model_backend,
                 seed=seed,
                 out_dir=out_dir,
+                rolling_window_years=args.rolling_window,
             )
             all_results.append(result)
 
